@@ -21,6 +21,11 @@ impl <T> Sevec<T> {
     /// Gets the length of the inner data.
     /// This function is actually O(n) because we don't store the length as part of our structure.
     /// This may be done externally to improve performance however that is up to the implementor.
+    /// ```rust
+    /// # use sevec::Sevec;
+    /// let mut sevec: Sevec<u32> = vec![1, 2, 3].into();
+    /// assert_eq!(sevec.len(), 3);
+    /// ```
     pub fn len(&self) -> usize {
         return self.refs.iter()
             .map(|v| v.len())
@@ -29,6 +34,10 @@ impl <T> Sevec<T> {
     }
 
     // Inserts a new slice at a given chunk position.
+    // ```rust
+    /// # use sevec::Sevec;
+    /// let mut sevec: Sevec<u32> = vec![1, 2, 3].into();
+    // ```
     pub fn insert_arc_slice_to_chunk_pos(&mut self, chunk_index: usize, value: Pin<Arc<[T]>>) -> () {
         // Gets the reference
         let data_inner_ref = ptr::slice_from_raw_parts(value.as_ptr(), value.len());
@@ -115,6 +124,14 @@ impl <T> Sevec<T> {
     }
 
     /// Gets a reference to some data.
+    /// ```rust
+    /// # use sevec::Sevec;
+    /// let mut sevec: Sevec<u32> = vec![1, 2, 3].into();
+    /// assert_eq!(sevec.get(0), Some(&1));
+    /// assert_eq!(sevec.get(1), Some(&2));
+    /// assert_eq!(sevec.get(2), Some(&3));
+    /// assert_eq!(sevec.get(3), None);
+    /// ```
     pub fn get(&self, idx: usize) -> Option<&T> {
 
         let (chunk_idx, total_len) = self.get_chunk_and_length_from_idx(idx)?;
@@ -128,6 +145,13 @@ impl <T> Sevec<T> {
     }
 
     /// Removes the element at a given index.
+    /// ```rust
+    /// # use sevec::Sevec;
+    /// let mut sevec: Sevec<u32> = vec![1, 2, 3].into();
+    /// sevec.remove(1);
+    /// assert_eq!(&format!("{:?}", sevec), "[1, 3]");
+    /// assert_eq!(sevec.len(), 2);
+    /// ```
     pub fn remove(&mut self, idx: usize) -> Option<()> {
         return self.remove_range(idx..=idx);
     }

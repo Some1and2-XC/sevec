@@ -1,6 +1,12 @@
 [package]
 name = "sevec"
 version = "0.1.0"
-edition = "2024"
+# edition = "2024"
+edition = "2015"
+description = "A fast, pure Rust implementation of the segmented array data structure."
+license = "MIT"
+repository = "https://github.com/Some1and2-XC/sevec"
+readme = "README.md"
+categories = ["data-structures"]
 
 [dependencies]

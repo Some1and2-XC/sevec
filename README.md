@@ -1,4 +1,5 @@
-# Sevec - A Rust Library focused on being a fast segmented array implementation for Rust Applications and Libraries.
+# Sevec
+### A fast, pure Rust implementation of the segmented array data structure.
 
 ## Purpose:
 The purpose of the `Sevec` data structure is to allow for fast array splitting and copy operations.
