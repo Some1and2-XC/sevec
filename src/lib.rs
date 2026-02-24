@@ -22,7 +22,7 @@ impl <T> Sevec<T> {
 
     /// Gets the length of the inner data.
     /// This function is actually O(n) because we don't store the length as part of our structure.
-    /// This may be done externally to improve performance however that is up to the implementor.
+    /// This may be done externally to improve performance, however, that is up to library consumers.
     /// ```rust
     /// # use sevec::Sevec;
     /// let mut sevec: Sevec<u32> = vec![1, 2, 3].into();
@@ -33,96 +33,6 @@ impl <T> Sevec<T> {
             .map(|v| v.len())
             .sum()
             ;
-    }
-
-    /// Inserts a new slice at a given chunk position.
-    /// ```rust
-    /// # use sevec::Sevec;
-    /// let mut sevec: Sevec<u32> = vec![1, 2, 3].into();
-    // ```
-    pub fn insert_arc_slice_to_chunk_pos(&mut self, chunk_index: usize, value: Pin<Arc<[T]>>) -> () {
-        // Gets the reference
-        let data_inner_ref = ptr::slice_from_raw_parts(value.as_ptr(), value.len());
-        // Adds the data.
-        self.data.push(value);
-        // Adds the reference.
-        self.refs.insert(chunk_index, data_inner_ref);
-        return ();
-    }
-
-    // Adds a new slice.
-    pub fn push_arc_slice(&mut self, value: Pin<Arc<[T]>>) -> () {
-        // Gets the reference
-        let data_inner_ref = ptr::slice_from_raw_parts(value.as_ptr(), value.len());
-        // Adds the data.
-        self.data.push(value);
-        // Adds the reference.
-        self.refs.push(data_inner_ref);
-        return ();
-    }
-
-    /*
-    /// Calculates the estimated size of the sevec.
-    fn size_estimation(&self) -> usize {
-
-        // The size of the inner [`Arc`] type.
-        // The [`Pin`] data type doesn't add size but is here because it better reflects the size
-        // of the data.
-        const ARC_SIZE: usize = size_of::<Pin<Arc<()>>>();
-
-        // this should be equal to sizeof::<usize>() * 2 (len + addr).
-        const SLICE_VEC_SIZE: usize = size_of::<Vec<*const [u8]>>();
-
-        let size =
-            size_of::<Self>() +
-            ARC_SIZE * self.data.len() +
-            SLICE_VEC_SIZE * self.refs.len() +
-            0
-            ;
-
-        return size;
-
-    }
-    */
-
-    /// Gets a specified value from both a chunk index and a chunk sub index.
-    pub fn get_from_chunk_and_idx(&self, chunk: usize, idx: usize) -> Option<&T> {
-        let chunk_slice = self.get_chunk(chunk)?;
-        return chunk_slice.get(idx);
-    }
-
-    /// Gets a specified chunk as a slice.
-    pub fn get_chunk(&self, chunk: usize) -> Option<&[T]> {
-        let chunk_ptr = self.refs.get(chunk)?;
-        return unsafe { chunk_ptr.as_ref() };
-    }
-
-    /// Gets the chunk index of a specified input index.
-    /// The first value in the result is the chunk index.
-    /// The second value is the sum of all the previous lengths up until that point.
-    pub fn get_chunk_and_length_from_idx(&self, idx: usize) -> Option<(usize, usize)> {
-
-        // Initializes
-        let mut total_len = 0;
-
-        // Goes through the references.
-        for (i, ref_ptr) in self.refs.iter().enumerate() {
-
-            // Calculates the new length
-            let cur_length = ref_ptr.len();
-            total_len += cur_length;
-
-            // Checks if we passed it.
-            if total_len > idx {
-                // Returns the index of the chunk and the sum of previous lengths.
-                total_len -= cur_length; // Goes to the start of the selected chunk
-                return Some((i, total_len));
-            }
-
-        }
-
-        return None;
-
     }
 
     /// Gets a reference to some data.
@@ -150,8 +60,8 @@ impl <T> Sevec<T> {
     /// ```rust
     /// # use sevec::Sevec;
     /// let mut sevec: Sevec<u32> = vec![1, 2, 3].into();
-    /// sevec.remove(1);
-    /// assert_eq!(&format!("{:?}", sevec), "[1, 3]");
+    /// sevec.remove(1); // Removes the middle `2`
+    /// assert_eq!(sevec.to_string(), "[1, 3]");
     /// assert_eq!(sevec.len(), 2);
     /// ```
     pub fn remove(&mut self, idx: usize) -> Option<()> {
@@ -162,11 +72,14 @@ impl <T> Sevec<T> {
     /// Without explicit bounds, this function will either start at the start or go until the end
     /// of all the data.
     ///
+    /// This function is a more ergonomic way of calling [`Self::remove_between_start_and_end`],
+    /// that funciton is also available if the [`RangeBounds`] handling overhead is unwanted.
+    ///
     /// ```rust
     /// # use sevec::Sevec;
     /// let mut sevec: Sevec<u32> = vec![1, 2, 3, 4].into();
-    /// sevec.remove_range(1..=2);
-    /// assert_eq!(&format!("{:?}", sevec), "[1, 4]");
+    /// sevec.remove_range(1..=2); // Removes both `2` and `3`
+    /// assert_eq!(sevec.to_string(), "[1, 4]");
     /// assert_eq!(sevec.len(), 2);
     /// ```
     pub fn remove_range(&mut self, range: impl RangeBounds<usize>) -> Option<()> {
@@ -177,12 +90,13 @@ impl <T> Sevec<T> {
             Bound::Unbounded => 0,
         };
 
-        let (starting_chunk_idx, starting_cumu_len) = self.get_chunk_and_length_from_idx(range_start)?;
-        // This is the index of the start of the bounds within the start chunk
-        let starting_chunk_rel_idx = range_start - starting_cumu_len;
-
         let range_end = match range.end_bound() {
             Bound::Unbounded => {
+
+                let (starting_chunk_idx, starting_cumu_len) = self.get_chunk_and_length_from_idx(range_start)?;
+                // This is the index of the start of the bounds within the start chunk
+                let starting_chunk_rel_idx = range_start - starting_cumu_len;
+
                 // If the relative index is the start of a chunk.
                 if starting_chunk_rel_idx == 0 {
                     // We remove the starting chunk and everything after it.
@@ -201,6 +115,29 @@ impl <T> Sevec<T> {
             Bound::Included(&n) => n,
             Bound::Excluded(&n) => n.checked_sub(1)?, // if n == 0
         };
+
+        return self.remove_between_start_and_end(range_start, range_end);
+
+    }
+
+    /// Removes all elements within the specified range.
+    /// Both the start and end values are inclusive.
+    ///
+    /// For an ergonomic wrapper around this method, use [`Self::remove_range`].
+    ///
+    /// ```rust
+    /// # use sevec::Sevec;
+    /// let mut sevec: Sevec<u32> = vec![1, 2, 3, 4].into();
+    /// // Removes everything between index 1 and 2 (numbers `2` and `3`)
+    /// sevec.remove_between_start_and_end(1, 2);
+    /// assert_eq!(sevec.to_string(), "[1, 4]");
+    /// assert_eq!(sevec.len(), 2);
+    /// ```
+    pub fn remove_between_start_and_end(&mut self, range_start: usize, range_end: usize) -> Option<()> {
+
+        let (starting_chunk_idx, starting_cumu_len) = self.get_chunk_and_length_from_idx(range_start)?;
+        // This is the index of the start of the bounds within the start chunk
+        let starting_chunk_rel_idx = range_start - starting_cumu_len;
 
         // This could be implemented a bit better considering we know starting_chunk_idx and
         // starting_cumu_len
@@ -266,6 +203,186 @@ impl <T> Sevec<T> {
 
     }
 
+    /// Adds a new slice.
+    /// This method is particularly well suited to situations where direct writing to the inner
+    /// value of an [`Arc`] pointer is available. This method moves the [`Arc`] pointer without
+    /// copying.
+    /// ```rust
+    /// # use sevec::Sevec;
+    /// # use std::{mem::MaybeUninit, pin::Pin, sync::Arc};
+    /// let mut sevec: Sevec<u32> = Sevec::new();
+    ///
+    /// let data_len = 6; // Example array size
+    ///
+    /// // Creates the pointer uninitialized to avoid zeroing.
+    /// let mut data = {
+    ///     let ptr = Arc::<[u32]>::new_uninit_slice(data_len);
+    ///     unsafe { ptr.assume_init() }
+    /// };
+    ///
+    /// // Here we get mutable access to the data. We call unwrap without
+    /// // worry because we know we have exclusive access to the pointer.
+    /// let data_mut = Arc::get_mut(&mut data).unwrap();
+    ///
+    /// // Writing the data directly to the [`Arc`] ptr.
+    /// for i in 0..data_mut.len() {
+    ///     data_mut[i] = i as u32;
+    /// }
+    ///
+    /// // Calling this function to push the data into the [`Sevec`].
+    /// sevec.push_arc_slice(Pin::new(data));
+    ///
+    /// // We can see the values we wrote directly into the [`Arc`] get displayed.
+    /// assert_eq!(sevec.to_string(), "[0, 1, 2, 3, 4, 5]");
+    /// ```
+    pub fn push_arc_slice(&mut self, value: Pin<Arc<[T]>>) -> () {
+        // Gets the reference
+        let data_inner_ref = ptr::slice_from_raw_parts(value.as_ptr(), value.len());
+        // Adds the data.
+        self.data.push(value);
+        // Adds the reference.
+        self.refs.push(data_inner_ref);
+        return ();
+    }
+
+    /*
+    /// Calculates the estimated size of the sevec.
+    fn size_estimation(&self) -> usize {
+
+        // The size of the inner [`Arc`] type.
+        // The [`Pin`] data type doesn't add size but is here because it better reflects the size
+        // of the data.
+        const ARC_SIZE: usize = size_of::<Pin<Arc<()>>>();
+
+        // this should be equal to sizeof::<usize>() * 2 (len + addr).
+        const SLICE_VEC_SIZE: usize = size_of::<Vec<*const [u8]>>();
+
+        let size =
+            size_of::<Self>() +
+            ARC_SIZE * self.data.len() +
+            SLICE_VEC_SIZE * self.refs.len() +
+            0
+            ;
+
+        return size;
+
+    }
+    */
+
+    /// Gets a specified chunk as a slice.
+    /// Note, this is the underlying chunk, not the actual data at a given index.
+    /// ```rust
+    /// # use sevec::Sevec;
+    /// // Initializes the array
+    /// let mut sevec: Sevec<u32> = vec![1, 2, 3].into();
+    ///
+    /// // Pushes more data
+    /// sevec.push_slice(&[4, 5, 6]);
+    ///
+    /// // Gets the initial data
+    /// let data = sevec.get_chunk(0).unwrap();
+    ///
+    /// // Checks result
+    /// assert_eq!(&data, &[1, 2, 3]); // We got the first allocation only.
+    /// ```
+    pub fn get_chunk(&self, chunk: usize) -> Option<&[T]> {
+        let chunk_ptr = self.refs.get(chunk)?;
+        return unsafe { chunk_ptr.as_ref() };
+    }
+
+    /// Gets a specified value from both a chunk index and a chunk sub index.
+    /// ```rust
+    /// # use sevec::Sevec;
+    /// // Initializes the array
+    /// let mut sevec: Sevec<u32> = vec![1, 2, 3].into();
+    /// assert_eq!(*sevec.get_from_chunk_and_idx(0, 0).unwrap(), 1); // Gets the first item
+    /// assert_eq!(sevec.get_from_chunk_and_idx(1, 0), None); // Doesn't Exist yet
+    ///
+    /// // Pushes more data
+    /// sevec.push_slice(&[4, 5, 6]);
+    /// // Gets the first item from the second allocation
+    /// assert_eq!(*sevec.get_from_chunk_and_idx(1, 0).unwrap(), 4);
+    /// ```
+    pub fn get_from_chunk_and_idx(&self, chunk: usize, idx: usize) -> Option<&T> {
+        let chunk_slice = self.get_chunk(chunk)?;
+        return chunk_slice.get(idx);
+    }
+
+    /// Gets the chunk index of a specified input index.
+    /// The first value in the result is the chunk index.
+    /// The second value is the sum of all the previous lengths up until the specified chunk.
+    /// ```rust
+    /// # use sevec::Sevec;
+    /// // Initializes the array
+    /// let mut sevec: Sevec<u32> = vec![1, 2, 3].into();
+    ///
+    /// // Adds more data
+    /// sevec.push_slice(&[4, 5, 6]);
+    /// 
+    /// // Gets the location of index 3
+    /// let (chunk_idx, prev_sum) = sevec.get_chunk_and_length_from_idx(3).unwrap();
+    ///
+    /// // The chunk index is 1
+    /// assert_eq!(chunk_idx, 1);
+    ///
+    /// // prev_sum is the amount of data that appeared before the chunk that was discovered.
+    /// assert_eq!(prev_sum, 3); // Because the first allocation had 3 items.
+    /// ```
+    pub fn get_chunk_and_length_from_idx(&self, idx: usize) -> Option<(usize, usize)> {
+
+        // Initializes
+        let mut total_len = 0;
+
+        // Goes through the references.
+        for (i, ref_ptr) in self.refs.iter().enumerate() {
+
+            // Calculates the new length
+            let cur_length = ref_ptr.len();
+            total_len += cur_length;
+
+            // Checks if we passed it.
+            if total_len > idx {
+                // Returns the index of the chunk and the sum of previous lengths.
+                total_len -= cur_length; // Goes to the start of the selected chunk
+                return Some((i, total_len));
+            }
+
+        }
+
+        return None;
+
+    }
+
+    /// Inserts a new slice at a given chunk position.
+    /// This method is especially useful if data can be written directly into the [`Arc<[T]>`].
+    /// An example of how this can be done can be found in the docs of [`Self::push_arc_slice`].
+    /// It is important to note that this method works on the internal chunk position, rather than
+    /// the index of the array.
+    /// ```rust
+    /// # use sevec::Sevec;
+    /// # use std::{pin::Pin, sync::Arc};
+    /// // Creating a sevec
+    /// let mut sevec: Sevec<u32> = vec![1, 2, 3].into();
+    /// 
+    /// // Creating new data
+    /// let slice_data = Arc::new([4, 5, 6]);
+    ///
+    /// // Adding the data before anything else.
+    /// sevec.insert_arc_slice_to_chunk_pos(0, Pin::new(slice_data));
+    ///
+    /// // Checking the result.
+    /// assert_eq!(&sevec.to_string(), "[4, 5, 6, 1, 2, 3]");
+    /// ```
+    pub fn insert_arc_slice_to_chunk_pos(&mut self, chunk_index: usize, value: Pin<Arc<[T]>>) -> () {
+        // Gets the reference
+        let data_inner_ref = ptr::slice_from_raw_parts(value.as_ptr(), value.len());
+        // Adds the data.
+        self.data.push(value);
+        // Adds the reference.
+        self.refs.insert(chunk_index, data_inner_ref);
+        return ();
+    }
+
 }
 
 impl <T: Unpin> Sevec<T> {
@@ -275,7 +392,7 @@ impl <T: Unpin> Sevec<T> {
     /// # use sevec::Sevec;
     /// let mut sevec = Sevec::new();
     /// sevec.push(1);
-    /// assert_eq!(&format!("{:?}", sevec), "[1]");
+    /// assert_eq!(sevec.to_string(), "[1]");
     /// assert_eq!(sevec.len(), 1);
     /// ```
     pub fn push(&mut self, value: T) -> () {
@@ -308,7 +425,7 @@ impl <T: Unpin + Clone + Sized> Sevec<T> {
     /// # use sevec::Sevec;
     /// let mut sevec = Sevec::new();
     /// sevec.push_slice(&[1, 2, 3, 4]);
-    /// assert_eq!(&format!("{:?}", sevec), "[1, 2, 3, 4]");
+    /// assert_eq!(sevec.to_string(), "[1, 2, 3, 4]");
     /// assert_eq!(sevec.len(), 4);
     /// ```
     pub fn push_slice(&mut self, value: &[T]) -> () {
@@ -364,6 +481,12 @@ impl <T: std::fmt::Debug> std::fmt::Debug for Sevec<T> {
         write!(f, "]")?;
 
         return Ok(());
+    }
+}
+
+impl <T: std::fmt::Debug> std::string::ToString for Sevec<T> {
+    fn to_string(&self) -> String {
+        return format!("{:?}", self);
     }
 }
 
