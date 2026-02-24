@@ -150,11 +150,6 @@ impl <T> Sevec<T> {
         let (ending_chunk_idx, ending_cumu_len) = self.get_chunk_and_length_from_idx(range_end)?;
         let ending_chunk_rel_idx = range_end - ending_cumu_len;
 
-        // Unsure if this is needed considering the behavior of range as well as how this will be
-        // handled in the removal code.
-        // // Bounds checking and such.
-        // if ending_chunk_idx > starting_chunk_idx { return None; }
-
         // This unwrap shouldn't really ever fail.
         // This is between two indexes which are known good (or supposedly are).
         // If this fails then there are some serious problems with the state of the code.
@@ -244,30 +239,6 @@ impl <T> Sevec<T> {
         self.refs.push(data_inner_ref);
         return ();
     }
-
-    /*
-    /// Calculates the estimated size of the sevec.
-    fn size_estimation(&self) -> usize {
-
-        // The size of the inner [`Arc`] type.
-        // The [`Pin`] data type doesn't add size but is here because it better reflects the size
-        // of the data.
-        const ARC_SIZE: usize = size_of::<Pin<Arc<()>>>();
-
-        // this should be equal to sizeof::<usize>() * 2 (len + addr).
-        const SLICE_VEC_SIZE: usize = size_of::<Vec<*const [u8]>>();
-
-        let size =
-            size_of::<Self>() +
-            ARC_SIZE * self.data.len() +
-            SLICE_VEC_SIZE * self.refs.len() +
-            0
-            ;
-
-        return size;
-
-    }
-    */
 
     /// Gets a specified chunk as a slice.
     /// Note, this is the underlying chunk, not the actual data at a given index.
@@ -626,7 +597,7 @@ mod tests {
         assert_eq!(data.len(), 0);
         // This implies that no empty pointers exist.
         // Not really a required attribute but is nice to have.
-        // assert_eq!(data.refs.len(), 0);
+        assert_eq!(data.refs.len(), 0);
     }
 
     #[test]
