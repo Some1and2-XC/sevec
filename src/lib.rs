@@ -442,6 +442,15 @@ mod tests {
     }
 
     #[test]
+    fn test_remove_other_range() {
+
+        let mut data: Sevec<_> = vec![1, 2, 3, 4].into();
+        let res = data.remove_range(1..=2);
+        assert!(res.is_some());
+
+    }
+
+    #[test]
     fn test_remove_everything() {
         let mut data = Sevec::new();
         data.push(1);
@@ -532,11 +541,6 @@ mod tests {
             vec![1, 23, 3, 3, 1, 2, 3, 4]
         );
 
-    }
-
-    #[test]
-    fn test_remove_out_of_range() {
-        todo!();
     }
 
 }
