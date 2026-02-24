@@ -8,6 +8,5 @@ license = "MIT"
 repository = "https://github.com/Some1and2-XC/sevec"
 readme = "README.md"
 categories = ["data-structures"]
-author = ["Some1and2-XC"]
 
 [dependencies]
