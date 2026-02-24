@@ -33,8 +33,8 @@ impl <T> Sevec<T> {
             ;
     }
 
-    // Inserts a new slice at a given chunk position.
-    // ```rust
+    /// Inserts a new slice at a given chunk position.
+    /// ```rust
     /// # use sevec::Sevec;
     /// let mut sevec: Sevec<u32> = vec![1, 2, 3].into();
     // ```
@@ -269,6 +269,13 @@ impl <T> Sevec<T> {
 impl <T: Unpin> Sevec<T> {
 
     /// Adds a value to the end of the array.
+    /// ```rust
+    /// # use sevec::Sevec;
+    /// let mut sevec = Sevec::new();
+    /// sevec.push(1);
+    /// assert_eq!(&format!("{:?}", sevec), "[1]");
+    /// assert_eq!(sevec.len(), 1);
+    /// ```
     pub fn push(&mut self, value: T) -> () {
 
         // Creates new ptr.
@@ -295,6 +302,13 @@ impl <T: Unpin> Sevec<T> {
 impl <T: Unpin + Clone + Sized> Sevec<T> {
 
     /// Copies and inserts a given slice.
+    /// ```rust
+    /// # use sevec::Sevec;
+    /// let mut sevec = Sevec::new();
+    /// sevec.push_slice(&[1, 2, 3, 4]);
+    /// assert_eq!(&format!("{:?}", sevec), "[1, 2, 3, 4]");
+    /// assert_eq!(sevec.len(), 4);
+    /// ```
     pub fn push_slice(&mut self, value: &[T]) -> () {
 
         let arc_ptr = Arc::<[T]>::new_uninit_slice(value.len());
