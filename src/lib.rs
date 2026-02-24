@@ -1,3 +1,5 @@
+#![doc = include_str!("../README.md")]
+
 use std::{ops::{Bound, RangeBounds}, pin::Pin, ptr, sync::Arc};
 
 #[derive(Clone)]
