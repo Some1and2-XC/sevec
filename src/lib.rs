@@ -18,6 +18,27 @@ impl <T> Sevec<T> {
         };
     }
 
+    /// Gets the length of the inner data.
+    /// This function is actually O(n) because we don't store the length as part of our structure.
+    /// This may be done externally to improve performance however that is up to the implementor.
+    pub fn len(&self) -> usize {
+        return self.refs.iter()
+            .map(|v| v.len())
+            .sum()
+            ;
+    }
+
+    // Inserts a new slice at a given chunk position.
+    pub fn insert_arc_slice_to_chunk_pos(&mut self, chunk_index: usize, value: Pin<Arc<[T]>>) -> () {
+        // Gets the reference
+        let data_inner_ref = ptr::slice_from_raw_parts(value.as_ptr(), value.len());
+        // Adds the data.
+        self.data.push(value);
+        // Adds the reference.
+        self.refs.insert(chunk_index, data_inner_ref);
+        return ();
+    }
+
     // Adds a new slice.
     pub fn push_arc_slice(&mut self, value: Pin<Arc<[T]>>) -> () {
         // Gets the reference
@@ -29,8 +50,9 @@ impl <T> Sevec<T> {
         return ();
     }
 
+    /*
     /// Calculates the estimated size of the sevec.
-    pub fn size_estimation(&self) -> usize {
+    fn size_estimation(&self) -> usize {
 
         // The size of the inner [`Arc`] type.
         // The [`Pin`] data type doesn't add size but is here because it better reflects the size
@@ -50,6 +72,7 @@ impl <T> Sevec<T> {
         return size;
 
     }
+    */
 
     /// Gets a specified value from both a chunk index and a chunk sub index.
     pub fn get_from_chunk_and_idx(&self, chunk: usize, idx: usize) -> Option<&T> {
@@ -66,7 +89,7 @@ impl <T> Sevec<T> {
     /// Gets the chunk index of a specified input index.
     /// The first value in the result is the chunk index.
     /// The second value is the sum of all the previous lengths up until that point.
-    fn get_chunk_idx(&self, idx: usize) -> Option<(usize, usize)> {
+    pub fn get_chunk_and_length_from_idx(&self, idx: usize) -> Option<(usize, usize)> {
 
         // Initializes
         let mut total_len = 0;
@@ -94,13 +117,116 @@ impl <T> Sevec<T> {
     /// Gets a reference to some data.
     pub fn get(&self, idx: usize) -> Option<&T> {
 
-        let (chunk_idx, total_len) = self.get_chunk_idx(idx)?;
+        let (chunk_idx, total_len) = self.get_chunk_and_length_from_idx(idx)?;
         let chunk = self.get_chunk(chunk_idx)?;
 
         // Gets the result
         let final_idx = idx - total_len;
         let res = chunk.get(final_idx)?;
         return Some(res);
+
+    }
+
+    /// Removes the element at a given index.
+    pub fn remove(&mut self, idx: usize) -> Option<()> {
+        return self.remove_range(idx..=idx);
+    }
+
+    /// Removes all elements within the specified range.
+    /// Without explicit bounds, this function will either start at the start or go until the end
+    /// of all the data.
+    ///
+    /// ```rust
+    /// ```
+    pub fn remove_range(&mut self, range: impl RangeBounds<usize>) -> Option<()> {
+
+        let range_start = match range.start_bound() {
+            Bound::Included(&n) => n,
+            Bound::Excluded(&n) => n + 1,
+            Bound::Unbounded => 0,
+        };
+
+        let (starting_chunk_idx, starting_cumu_len) = self.get_chunk_and_length_from_idx(range_start)?;
+        // This is the index of the start of the bounds within the start chunk
+        let starting_chunk_rel_idx = range_start - starting_cumu_len;
+
+        let range_end = match range.end_bound() {
+            Bound::Unbounded => {
+                // If the relative index is the start of a chunk.
+                if starting_chunk_rel_idx == 0 {
+                    // We remove the starting chunk and everything after it.
+                    unsafe { self.refs.set_len(starting_chunk_idx); };
+                    return Some(());
+                }
+
+                let start_mut = self.refs.get_mut(starting_chunk_idx)?;
+                // Gets new location.
+                *start_mut = ptr::slice_from_raw_parts_mut(start_mut.addr() as *mut _, starting_chunk_rel_idx);
+                // Updates length
+                unsafe { self.refs.set_len(starting_chunk_idx + 1); };
+                return Some(());
+            }
+
+            Bound::Included(&n) => n,
+            Bound::Excluded(&n) => n.checked_sub(1)?, // if n == 0
+        };
+
+        // This could be implemented a bit better considering we know starting_chunk_idx and
+        // starting_cumu_len
+        // Slight performance like this isn't a concern right now but should be considered in the
+        // future. (TODO!)
+        // We should have a function that works like
+        // "get_chunk_and_length_from_idx_and_other_idx_and_len".
+        // Very long name but this is okay because it would mainly be used internally (though
+        // exposed externally).
+        let (ending_chunk_idx, ending_cumu_len) = self.get_chunk_and_length_from_idx(range_end)?;
+        let ending_chunk_rel_idx = range_end - ending_cumu_len;
+
+        // Unsure if this is needed considering the behavior of range as well as how this will be
+        // handled in the removal code.
+        // // Bounds checking and such.
+        // if ending_chunk_idx > starting_chunk_idx { return None; }
+
+        // This unwrap shouldn't really ever fail.
+        // This is between two indexes which are known good (or supposedly are).
+        // If this fails then there are some serious problems with the state of the code.
+        // Gets the updated first chunk.
+        let mut starting_chunk = *self.refs.get(starting_chunk_idx).unwrap();
+        starting_chunk = ptr::slice_from_raw_parts(starting_chunk.addr() as *const _, starting_chunk_rel_idx);
+
+        // Gets the updated end chunk
+        let mut ending_chunk = *self.refs.get(ending_chunk_idx).unwrap();
+        ending_chunk = ptr::slice_from_raw_parts(
+            (ending_chunk.addr() + (ending_chunk_rel_idx + 1) * size_of::<T>()) as *const _,
+            ending_chunk.len() - (ending_chunk_rel_idx + 1)
+        );
+
+        // Creates new array.
+        let mut out_refs = Vec::with_capacity(self.refs.len() - (ending_chunk_idx - starting_chunk_idx) + 2);
+
+        // Gets the starting values
+        for i in 0..starting_chunk_idx {
+            out_refs.push(self.refs[i]);
+        }
+
+        // Adds the chunks
+        if starting_chunk.len() != 0 {
+            out_refs.push(starting_chunk);
+        }
+
+        if ending_chunk.len() != 0 {
+            out_refs.push(ending_chunk);
+        }
+
+        // Adds the ending values
+        for i in (ending_chunk_idx + 1)..self.refs.len() {
+            out_refs.push(self.refs[i]);
+        }
+
+        // Updates refs
+        self.refs = out_refs;
+
+        return Some(());
 
     }
 
@@ -111,7 +237,7 @@ impl <T: Unpin> Sevec<T> {
     /// Adds a value to the end of the array.
     pub fn push(&mut self, value: T) -> () {
 
-        // Creates new ptr
+        // Creates new ptr.
         let mut arc_ptr = Arc::<[T]>::new_uninit_slice(1);
         // Writes value to it
         let arc_ptr_mut = Arc::get_mut(&mut arc_ptr).unwrap();
@@ -126,94 +252,36 @@ impl <T: Unpin> Sevec<T> {
         // In theory, we could just hard-code adding the slice length of 1 but I don't really
         // think this would make much of a difference.
         self.push_arc_slice(arc_ptr);
-        return ();
-
-    }
-
-
-    /// Removes the element at a given index.
-    pub fn remove(&mut self, idx: usize) -> Option<()> {
-
-        return self.remove_range(idx..=idx);
-
-        /*
-        let (chunk_idx, total_len) = self.get_chunk_idx(idx)?;
-
-        // We need to handle several cases.
-        // 1. Where it is the only data in the segment.
-        // 2. Where it is the start of segmented data.
-        // 3. Where it is the end of segmented data.
-        // 4. Where it is the middle of segmented data.
-        //
-        // We are going to start with the simplest case (being case 1).
-
-        let chunk = self.get_chunk(chunk_idx)?;
-        let chunk_len = chunk.len();
-        let relative_idx = idx - total_len;
-
-        debug_assert_eq!(chunk_len, 0); // The length of a chunk should never be 0
-
-        // match relative_idx
-
-        if chunk_len == 1 {
-            // Here we just remove the element if it is the only element in the array.
-            self.refs.remove(chunk_idx);
-            return Some(());
-        }
-
-        todo!();
-        */
-
-    }
-
-    pub fn remove_range(&mut self, range: impl RangeBounds<usize>) -> Option<()> {
-
-        let range_start = match range.start_bound() {
-            Bound::Included(n) => *n,
-            Bound::Excluded(n) => *n + 1,
-            Bound::Unbounded => 0,
-        };
-
-        let range_end = match range.end_bound() {
-            Bound::Included(n) => *n,
-            Bound::Excluded(n) => *n - 1,
-            Bound::Unbounded => 0,
-        };
-
-        let starting_chunk = self.get_chunk(chunk_idx)?;
-
-        // let chunk = self.get_chunk(chunk_idx)?;
-        let starting_chunk_len = starting_chunk.len();
-        let relative_idx = idx - total_len;
-
-        debug_assert_eq!(chunk_len, 0); // The length of a chunk should never be 0
-
-        // match relative_idx
-
-        if chunk_len == 1 {
-            // Here we just remove the element if it is the only element in the array.
-            self.refs.remove(chunk_idx);
-            return Some(());
-        }
-
-        todo!();
+        return;
 
     }
 
 }
 
-impl <T> From<Pin<Arc<[T]>>> for Sevec<T> {
+impl <T: Unpin + Clone + Sized> Sevec<T> {
 
-    fn from(value: Pin<Arc<[T]>>) -> Self {
-        // Gets the length
-        let value_len = value.len();
-        let ptr = ptr::slice_from_raw_parts(value.as_ptr(), value_len);
-        return Self {
-            data: vec![ value, ],
-            refs: vec![ ptr,   ],
-        };
+    /// Copies and inserts a given slice.
+    pub fn push_slice(&mut self, value: &[T]) -> () {
+
+        let arc_ptr = Arc::<[T]>::new_uninit_slice(value.len());
+        let mut arc_ptr = unsafe { arc_ptr.assume_init() };
+
+        let arc_ptr_mut = Arc::get_mut(&mut arc_ptr).unwrap();
+        let arc_ptr_mut_raw = arc_ptr_mut.as_mut_ptr();
+
+        // Copies the data.
+        unsafe {
+            ptr::copy_nonoverlapping(value.as_ptr(), arc_ptr_mut_raw, value.len());
+        }
+
+        let arc_ptr = Pin::new(arc_ptr);
+
+        self.push_arc_slice(arc_ptr);
+
+        return;
 
     }
+
 }
 
 impl <T: std::fmt::Debug> std::fmt::Debug for Sevec<T> {
@@ -222,14 +290,21 @@ impl <T: std::fmt::Debug> std::fmt::Debug for Sevec<T> {
         // Writes open bracket
         write!(f, "[")?;
 
+        // Flag for if the item being written is the first.
+        let mut first = true;
+
         // Writes the inner data.
-        for (i, ref_ptr) in self.refs.iter().enumerate() {
+        for ref_ptr in self.refs.iter() {
 
             // Goes through each slice
             let ref_slice = unsafe { &**ref_ptr };
-            for (j, entry) in ref_slice.iter().enumerate() {
+            for entry in ref_slice.iter() {
+                // Checks if value is first item
+                match first {
+                    true  => { first = false; },
+                    false => write!(f, ", ")?,
+                }
                 // Writes value
-                if i != 0 || j != 0 { write!(f, ", ")?; }
                 write!(f, "{:?}", entry)?;
             }
 
@@ -242,24 +317,132 @@ impl <T: std::fmt::Debug> std::fmt::Debug for Sevec<T> {
     }
 }
 
+impl <T> From<Pin<Arc<[T]>>> for Sevec<T> {
+    fn from(value: Pin<Arc<[T]>>) -> Self {
+        // Gets the length
+        let value_len = value.len();
+        let ptr = ptr::slice_from_raw_parts(value.as_ptr(), value_len);
+        return Self {
+            data: vec![ value, ],
+            refs: vec![ ptr,   ],
+        };
+    }
+}
+
+impl <T: Unpin + Clone + Sized> From<&[T]> for Sevec<T> {
+    fn from(value: &[T]) -> Self {
+        let mut data = Self::new();
+        data.push_slice(value);
+        return data;
+    }
+}
+
+impl <T: Unpin + Clone + Sized> From<Vec<T>> for Sevec<T> {
+    fn from(value: Vec<T>) -> Self {
+        let slice = value.as_slice();
+        return slice.into();
+    }
+}
+
+impl <T: Clone> Into<Vec<T>> for Sevec<T> {
+    fn into(self) -> Vec<T> {
+
+        // Technically self.len is O(n) but the O(n) is pretty fast.
+        // I imagine this is likely worth not re-allocating over and over but that is just an
+        // assumption.
+        let out_len = self.len();
+        let mut new_vec = Vec::<T>::with_capacity(out_len);
+        let new_ptr_addr = new_vec.as_mut_ptr();
+        let mut length_sum = 0;
+
+        for chunk in self.refs {
+            // Copies Data
+            unsafe {
+                ptr::copy_nonoverlapping(
+                    chunk.addr() as *const T,
+                    new_ptr_addr.add(length_sum),
+                    chunk.len()
+                );
+            };
+            // Updates last byte
+            length_sum += chunk.len();
+        }
+
+        // Updates vec length
+        unsafe{ new_vec.set_len(out_len); }
+
+        return new_vec;
+
+    }
+}
+
 #[cfg(test)]
 mod tests {
-
 
     use super::*;
 
     #[test]
-    fn general_tests() {
-
+    fn test_display() {
         let mut v = Sevec::new();
         v.push("Hello There!");
-
         let vec = vec![
             "Hello There!",
         ];
-
         assert_eq!(format!("{:?}", vec), format!("{:?}", v));
+        v.insert_arc_slice_to_chunk_pos(0, Pin::new(vec!["Hello", "H"].into()));
+        v.remove_range(0..2);
+        assert_eq!(format!("{:?}", vec), format!("{:?}", v));
+    }
 
+    #[test]
+    fn test_remove_basic() {
+        let mut data = Sevec::new();
+        data.push(1);
+        data.push(2);
+        data.push(3);
+        data.push(4);
+        data.remove_range(1..=2).unwrap();
+        assert_eq!(data.len(), 2);
+        assert_eq!(data.get(0), Some(&1));
+        assert_eq!(data.get(1), Some(&4));
+    }
+
+    #[test]
+    fn test_remove_everything() {
+        let mut data = Sevec::new();
+        data.push(1);
+        data.push(2);
+        data.push(3);
+        data.push(4);
+        data.remove_range(0..data.len());
+        assert_eq!(data.len(), 0);
+        // This implies that no empty pointers exist.
+        // Not really a required attribute but is nice to have.
+        assert_eq!(data.refs.len(), 0);
+    }
+
+    #[test]
+    fn test_remove_slices() {
+
+        let mut data = Sevec::new();
+        data.push_arc_slice(Pin::new(vec![5, 2, 1].into()));
+        data.push(1);
+        data.push(2);
+        data.push(3);
+        data.push(4);
+        data.push_arc_slice(Pin::new(vec![1, 2, 3].into()));
+
+        assert_eq!(format!("{:?}", data), format!("{:?}",
+            vec![5, 2, 1, 1, 2, 3, 4, 1, 2, 3]
+        ));
+
+        data.remove_range(1..9); // Remove across two slices
+        assert_eq!(format!("{:?}", data), format!("{:?}", vec![5, 3]));
+        data.remove_range(1..); // Unbounded remove
+        assert_eq!(format!("{:?}", data), format!("{:?}", vec![5]));
+        data.push(3);
+        data.remove_range(..data.len()); // Unbounded remove from front
+        assert_eq!(format!("{:?}", data), format!("{:?}", Vec::<i32>::new()));
     }
 
     #[test]
@@ -296,13 +479,27 @@ mod tests {
 
         assert_eq!(data.get(0), Some(&0));
         assert_eq!(data.get(1), Some(&2));
-        assert_eq!(data.get(2), None);
+        assert_eq!(data.get(5), None); // After removal the end would have moved.
 
-        // Data removed check (from segmented section).
-        todo!();
-        // data.remove(1).unwrap();
+        data.remove_range(..);
+        assert_eq!(data.len(), 0);
 
+    }
 
+    #[test]
+    fn test_push_slice() {
+
+        let mut data: Sevec<u32> = vec![1, 23, 3, 3].into();
+        data.push_slice(&[1, 2, 3, 4]);
+
+        // Makes miri explode
+        let data_values = format!("{:?}", data.data);
+
+        let reference_vec: Vec<_> = data.into();
+        assert_eq!(
+            reference_vec,
+            vec![1, 23, 3, 3, 1, 2, 3, 4]
+        );
 
     }
 
