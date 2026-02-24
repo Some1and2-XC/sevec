@@ -1,0 +1,10 @@
+[package]
+name = "sevec"
+version = "0.1.0"
+edition = "2024"
+
+[[bin]]
+name = "sevec-showcase"
+path = "src/main.rs"
+
+[dependencies]
