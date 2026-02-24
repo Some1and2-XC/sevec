@@ -11,6 +11,6 @@ This library is written to use as few allocations as possible, the style of code
 This library uses a good deal of unsafe code. This is for performance.
 If concerns about the soundness of the unsafe exist, the following command can be used to validate:
 
-```rust
+```sh
 MIRIFLAGS=-Zmiri-permissive-provenance rustup run nightly cargo miri test
 ```
