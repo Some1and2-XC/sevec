@@ -141,6 +141,7 @@ impl <T> Sevec<T> {
     /// let mut sevec: Sevec<u32> = vec![1, 2, 3, 4].into();
     /// sevec.remove_range(1..=2);
     /// assert_eq!(&format!("{:?}", sevec), "[1, 4]");
+    /// assert_eq!(sevec.len(), 2);
     /// ```
     pub fn remove_range(&mut self, range: impl RangeBounds<usize>) -> Option<()> {
 
@@ -226,7 +227,8 @@ impl <T> Sevec<T> {
 
         // This might be able to be replaced with a [`ptr::copy`] call however, in many cases this
         // might just be shifting one element at a time where the speedups may be very little.
-        for i in (ending_chunk_idx + 1)..self.refs.len() {
+        // We subtract 1 from the length because of the padded value added earlier.
+        for i in (ending_chunk_idx + 1)..(self.refs.len() - 1) {
             self.refs[running_length] = self.refs[i];
             running_length += 1;
         }
