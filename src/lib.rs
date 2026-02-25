@@ -78,8 +78,8 @@ impl <T> Sevec<T> {
                 let offset = idx - prev_sum;
 
                 // Creates left and right sides
-                let left = ptr::slice_from_raw_parts(chunk.addr() as *const T, offset);
-                let right = ptr::slice_from_raw_parts((chunk.addr() + size_of::<T>() * offset) as *const T, chunk.len() - offset);
+                let left = ptr::slice_from_raw_parts(chunk as *const T, offset);
+                let right = ptr::slice_from_raw_parts((chunk as *const T).add(offset), chunk.len() - offset);
 
                 (chunk_idx, left, right)
             },
@@ -172,7 +172,7 @@ impl <T> Sevec<T> {
 
                 let start_mut = self.refs.get_mut(starting_chunk_idx)?;
                 // Gets new location.
-                *start_mut = ptr::slice_from_raw_parts_mut(start_mut.addr() as *mut _, starting_chunk_rel_idx);
+                *start_mut = ptr::slice_from_raw_parts_mut(*start_mut as *mut _, starting_chunk_rel_idx);
                 // Updates length
                 unsafe { self.refs.set_len(starting_chunk_idx + 1); };
                 return Some(());
@@ -221,12 +221,14 @@ impl <T> Sevec<T> {
         // If this fails then there are some serious problems with the state of the code.
         // Gets the updated first chunk.
         let mut starting_chunk = *self.refs.get(starting_chunk_idx).unwrap();
-        starting_chunk = ptr::slice_from_raw_parts(starting_chunk.addr() as *const _, starting_chunk_rel_idx);
+        starting_chunk = ptr::slice_from_raw_parts(starting_chunk as *const _, starting_chunk_rel_idx);
 
         // Gets the updated end chunk
         let mut ending_chunk = *self.refs.get(ending_chunk_idx).unwrap();
         ending_chunk = ptr::slice_from_raw_parts(
-            (ending_chunk.addr() + (ending_chunk_rel_idx + 1) * size_of::<T>()) as *const _,
+            unsafe {
+                (ending_chunk as *const T).add(ending_chunk_rel_idx + 1)
+            },
             ending_chunk.len() - (ending_chunk_rel_idx + 1)
         );
 
@@ -570,7 +572,7 @@ impl <T: Clone> Into<Vec<T>> for &Sevec<T> {
             // Copies Data
             unsafe {
                 ptr::copy_nonoverlapping(
-                    chunk.addr() as *const T,
+                    *chunk as *const T,
                     new_ptr_addr.add(length_sum),
                     chunk.len()
                 );
