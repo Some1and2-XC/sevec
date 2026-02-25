@@ -121,7 +121,7 @@ impl <T: Unpin + Clone + Sized> Sevec<T> {
     /// ```rust
     /// # use sevec::Sevec;
     /// // Initializes the data
-    /// let mut sevec = vec![1, 2, 3, 4].into();
+    /// let mut sevec: Sevec<u32> = vec![1, 2, 3, 4].into();
     ///
     /// // Inserts numbers between the 1 and 2
     /// sevec.insert_slice(1, &[100, 200]).unwrap();
