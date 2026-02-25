@@ -1,7 +1,6 @@
 [package]
 name = "sevec"
 version = "0.1.0"
-# edition = "2024"
 edition = "2015"
 description = "A fast, pure Rust implementation of the segmented array data structure."
 license = "MIT"
@@ -10,3 +9,12 @@ readme = "README.md"
 categories = ["data-structures"]
 
 [dependencies]
+serde = { version = "1.0.228", optional = true }
+
+[dev-dependencies]
+# Unfortunate that dev-deps can't be feature gated
+serde_json = "1.0.149"
+
+[features]
+default = []
+serde = ["dep:serde"]

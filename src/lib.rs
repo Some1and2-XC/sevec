@@ -662,6 +662,128 @@ impl <T: Clone> Into<Vec<T>> for &Sevec<T> {
     }
 }
 
+#[cfg(feature = "serde")]
+mod serde_impl {
+
+    use super::*;
+
+    #[derive(Default)]
+    pub struct SevecVisitor;
+
+    impl <'de> serde::de::Visitor<'de> for SevecVisitor {
+        type Value = Sevec<u8>;
+        fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+            return formatter.write_str("Some Bytes.");
+        }
+        fn visit_bytes<E>(self, v: &[u8]) -> Result<Self::Value, E>
+            where
+                E: serde::de::Error, {
+            let res = Self::Value::from(v);
+            return Ok(res);
+        }
+        fn visit_byte_buf<E>(self, v: Vec<u8>) -> Result<Self::Value, E>
+            where
+                E: serde::de::Error, {
+            return Ok(v.into());
+        }
+
+        fn visit_borrowed_bytes<E>(self, v: &'de [u8]) -> Result<Self::Value, E>
+            where
+                E: serde::de::Error, {
+            return Ok(Self::Value::from(v));
+        }
+
+        fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+            where
+                A: serde::de::SeqAccess<'de>, {
+
+            // As it should be but implementations don't like me.
+            // let len = seq.size_hint().ok_or(serde::de::Error::custom("Failed to get `size_hint` for `Sevec<T>` visitor!"))?;
+
+            let res = match seq.size_hint() {
+                // Better path with pre-allocation with size-hint.
+                Some(len) => {
+                    // Gets data
+                    let mut data = {
+                        let data = Arc::<[u8]>::new_uninit_slice(len);
+                        unsafe { data.assume_init() }
+                    };
+                    let data_mut = Arc::get_mut(&mut data).unwrap();
+                    // Gets running index
+                    let mut count = 0;
+                    // Writes the data
+                    while let Ok(Some(v)) = seq.next_element() {
+
+                        // This is a bad sign!
+                        // We just break in this case but this does mean that the size hint
+                        // lied to us.
+                        if count >= len {
+                            return Err(serde::de::Error::custom("size_hint doesn't match actual size (size_hint undershot), a full array cannot be created."));
+                        }
+                        // Updates the value
+                        data_mut[count] = v;
+                        count += 1;
+                    }
+                    // let mut value = Sevec::new();
+                    // value.push_arc_slice(Pin::new(data));
+                    // return value;
+                    Self::Value::from(Pin::new(data))
+                },
+
+                // Worse path if we don't know the length.
+                None => {
+                    let mut buf = Vec::new();
+                    while let Ok(Some(v)) = seq.next_element() {
+                        buf.push(v);
+                    }
+
+                    Self::Value::from(buf)
+                },
+
+            };
+
+            return Ok(res);
+
+        }
+
+
+    }
+
+    impl <'de> serde::Deserialize<'de> for Sevec<u8> {
+        fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+            where
+                D: serde::Deserializer<'de> {
+            return deserializer.deserialize_bytes(SevecVisitor);
+        }
+
+    }
+
+    impl serde::Serialize for Sevec<u8> {
+        fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+            where
+                S: serde::Serializer {
+            let data: Vec<_> = self.into();
+            return serializer.serialize_bytes(&data);
+        }
+    }
+
+    #[test]
+    fn test_serde() {
+
+        let data: Sevec<_> = vec![1, 2, 3, 4].into();
+
+        // Serializes
+        let string = serde_json::to_string(&data).unwrap();
+        // Deserializes
+        let deser: Sevec<u8> = serde_json::from_str(&string).unwrap();
+
+        // Is the same as the original
+        assert_eq!(deser.to_string(), data.to_string());
+
+    }
+
+}
+
 #[cfg(test)]
 mod tests {
 
