@@ -45,14 +45,80 @@ impl <T> Sevec<T> {
     /// assert_eq!(sevec.get(3), None);
     /// ```
     pub fn get(&self, idx: usize) -> Option<&T> {
-
         let (chunk_idx, total_len) = self.get_chunk_and_length_from_idx(idx)?;
         let chunk = self.get_chunk(chunk_idx)?;
-
         // Gets the result
         let final_idx = idx - total_len;
         let res = chunk.get(final_idx)?;
         return Some(res);
+    }
+
+    /// Inserts a slice into a specified location in the sevec.
+    pub fn insert_arc_slice(&mut self, idx: usize, value: Pin<Arc<[T]>>) -> Option<()> {
+        // Gets slice
+        let slice = ptr::slice_from_raw_parts(value.as_ptr(), value.len());
+        // Tries to insert.
+        unsafe { self.insert_slice(idx, slice) }?;
+        // Inserts Data only if the slice was added.
+        self.data.push(value);
+        // Returns result.
+        return Some(());
+    }
+
+    /// Adds a slice to the array.
+    /// This should only be done with a slice which has a lifetime associated with the lifetime of
+    /// this object, in particular, either a slice refering to something with a static lifetime or
+    /// containing data within the data of this array is intended.
+    pub unsafe fn insert_slice(&mut self, idx: usize, slice: *const [T]) -> Option<()> {
+
+        let (mut write_idx, left, right) = match self.get_chunk_and_length_from_idx(idx) {
+            Some((chunk_idx, prev_sum))=> {
+
+                let chunk = *self.refs.get(chunk_idx)?;
+                let offset = idx - prev_sum;
+
+                // Creates left and right sides
+                let left = ptr::slice_from_raw_parts(chunk.addr() as *const T, offset);
+                let right = ptr::slice_from_raw_parts((chunk.addr() + size_of::<T>() * offset) as *const T, chunk.len() - offset);
+
+                (chunk_idx, left, right)
+            },
+            None => {
+                // If we didn't find the chunk but the chunk index was 0, we continue.
+                if idx != 0 {
+                    return None;
+                }
+                (0, ptr::slice_from_raw_parts(0 as *const _, 0), ptr::slice_from_raw_parts(0 as *const _, 0))
+            },
+        };
+
+        // Inserts values
+
+        // We write this to the left of the chunk (if there was a chunk)
+        if left.len() != 0 {
+            self.refs.insert(write_idx, left);
+            write_idx += 1;
+        }
+
+        // We write the actual data overtop of the original chunk each time.
+        if slice.len() != 0 {
+            if let Some(data) = self.refs.get_mut(write_idx) {
+                *data = slice;
+            }
+            else {
+                self.refs.insert(write_idx, slice);
+            }
+
+            // self.refs.insert(write_idx, slice);
+            write_idx += 1;
+        }
+
+        if right.len() != 0 {
+            self.refs.insert(write_idx, right);
+            // write_idx += 1;
+        }
+
+        return Some(());
 
     }
 
@@ -289,7 +355,7 @@ impl <T> Sevec<T> {
     ///
     /// // Adds more data
     /// sevec.push_slice(&[4, 5, 6]);
-    /// 
+    ///
     /// // Gets the location of index 3
     /// let (chunk_idx, prev_sum) = sevec.get_chunk_and_length_from_idx(3).unwrap();
     ///
@@ -334,7 +400,7 @@ impl <T> Sevec<T> {
     /// # use std::{pin::Pin, sync::Arc};
     /// // Creating a sevec
     /// let mut sevec: Sevec<u32> = vec![1, 2, 3].into();
-    /// 
+    ///
     /// // Creating new data
     /// let slice_data = Arc::new([4, 5, 6]);
     ///
@@ -432,10 +498,11 @@ impl <T: std::fmt::Debug> std::fmt::Debug for Sevec<T> {
         let mut first = true;
 
         // Writes the inner data.
-        for ref_ptr in self.refs.iter() {
+        for &ref_ptr in self.refs.iter() {
 
             // Goes through each slice
-            let ref_slice = unsafe { &**ref_ptr };
+            let ref_slice = unsafe { &*ref_ptr };
+
             for entry in ref_slice.iter() {
                 // Checks if value is first item
                 match first {
@@ -542,6 +609,31 @@ mod tests {
         v.insert_arc_slice_to_chunk_pos(0, Pin::new(vec!["Hello", "H"].into()));
         v.remove_range(0..2).unwrap();
         assert_eq!(format!("{:?}", vec), format!("{:?}", v));
+    }
+
+    #[test]
+    fn test_insert_slice() {
+        let mut sevec = Sevec::new();
+        sevec.push_slice(&[1, 2, 3]);
+        let data = &[4, 5, 6];
+        let data_ptr = ptr::slice_from_raw_parts(data.as_ptr(), data.len());
+        unsafe {
+            sevec.insert_slice(1, data_ptr)
+        }.unwrap();
+        assert_eq!(sevec.to_string(), "[1, 4, 5, 6, 2, 3]");
+
+        sevec.remove_range(..);
+
+        assert!(unsafe { sevec.insert_slice(1, &[1, 2, 3]) }.is_none());
+        assert_eq!(sevec.len(), 0);
+        assert_eq!(sevec.refs.len(), 0);
+
+        unsafe { sevec.insert_slice(0, data_ptr) }.unwrap();
+        assert_eq!(&sevec.to_string(), "[4, 5, 6]");
+
+        unsafe { sevec.insert_slice(0, data_ptr) }.unwrap();
+        assert_eq!(&sevec.to_string(), "[4, 5, 6, 4, 5, 6]");
+
     }
 
     #[test]
