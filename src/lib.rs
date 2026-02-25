@@ -116,7 +116,7 @@ impl <T: Unpin + Clone + Sized> Sevec<T> {
     }
 
     /// Creates a copy of the slice data and inserts it at a specified location.
-    /// This method uses [`Self::insert_arc_slice`] and if able, this method should be prefered
+    /// This method uses [`Self::insert_arc_slice`] and if able, this method should be preferred
     /// with direct data writing to the underlying [`Arc`] data structure.
     /// ```rust
     /// # use sevec::Sevec;
@@ -226,7 +226,7 @@ impl <T> Sevec<T> {
 
     /// Adds a slice to the array.
     /// This should only be done with a slice which has a lifetime associated with the lifetime of
-    /// this object, in particular, either a slice refering to something with a static lifetime or
+    /// this object, in particular, either a slice referring to something with a static lifetime or
     /// containing data within the data of this array is intended.
     ///
     /// This function is intended to be used in cases where repeated data is going to be added to
@@ -278,7 +278,7 @@ impl <T> Sevec<T> {
             write_idx += 1;
         }
 
-        // We write the actual data overtop of the original chunk each time.
+        // We write the actual data over-top of the original chunk each time.
         if slice.len() != 0 {
             if let Some(data) = self.refs.get_mut(write_idx) {
                 *data = slice;
@@ -316,7 +316,7 @@ impl <T> Sevec<T> {
     /// of all the data.
     ///
     /// This function is a more ergonomic way of calling [`Self::remove_between_start_and_end`],
-    /// that funciton is also available if the [`RangeBounds`] handling overhead is unwanted.
+    /// that function is also available if the [`RangeBounds`] handling overhead is unwanted.
     ///
     /// ```rust
     /// # use sevec::Sevec;
