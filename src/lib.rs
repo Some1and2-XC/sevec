@@ -81,6 +81,26 @@ impl <T> Sevec<T> {
 
     }
 
+    /// Joins two [`Sevec<T>`]'s together.
+    /// The `other` value gets added onto the end.
+    /// ```rust
+    /// # use sevec::Sevec;
+    /// let mut sevec: Sevec<u8> = vec![1, 2, 3].into();
+    /// sevec.extend(vec![4, 5, 6].into());
+    /// assert_eq!(sevec.to_string(), "[1, 2, 3, 4, 5, 6]");
+    /// ```
+    pub fn extend(&mut self, other: Self) -> () {
+        let Self { data, refs} = other;
+        // Pushes data
+        for v in data.into_iter() {
+            self.data.push(v);
+        }
+        // Pushes refs
+        for v in refs.into_iter() {
+            self.refs.push(v);
+        }
+    }
+
 }
 
 impl <T: Clone + Sized> Sevec<T> {
