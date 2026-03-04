@@ -569,6 +569,19 @@ impl <T> Sevec<T> {
         return &mut self.refs;
     }
 
+    /// Gets the inner data values.
+    pub fn get_inner_data(&self) -> &[Arc<[T]>] {
+        return &self.data;
+    }
+
+    /// Gets the inner data values mutably.
+    /// Removing values that aren't in scope for the lifetime of this object will cause undefined
+    /// behavior.
+    /// Know what you're doing before using this method.
+    pub unsafe fn get_inner_data_mut(&mut self) -> &mut Vec<Arc<[T]>> {
+        return &mut self.data;
+    }
+
 }
 
 impl <T: std::fmt::Debug> std::fmt::Debug for Sevec<T> {
