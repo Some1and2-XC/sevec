@@ -1,11 +1,11 @@
 #![doc = include_str!("../README.md")]
 
-use std::{ops::{Bound, RangeBounds}, pin::Pin, ptr, sync::Arc};
+use std::{ops::{Bound, RangeBounds}, ptr, sync::Arc};
 
 #[derive(Clone)]
 pub struct Sevec<T> {
     /// The underlying data.
-    data: Vec<Pin<Arc<[T]>>>,
+    data: Vec<Arc<[T]>>,
     /// The ordered references to read through.
     refs: Vec<*const [T]>,
 }
@@ -53,10 +53,6 @@ impl <T> Sevec<T> {
         return Some(res);
     }
 
-}
-
-impl <T: Unpin> Sevec<T> {
-
     /// Adds a value to the end of the array.
     /// ```rust
     /// # use sevec::Sevec;
@@ -76,7 +72,6 @@ impl <T: Unpin> Sevec<T> {
         // This is safe because we literally just initialized the uninitialized value (to the
         // passed value)
         let arc_ptr = unsafe { arc_ptr.assume_init() };
-        let arc_ptr = Pin::new(arc_ptr);
 
         // Pushes the value
         // In theory, we could just hard-code adding the slice length of 1 but I don't really
@@ -88,7 +83,7 @@ impl <T: Unpin> Sevec<T> {
 
 }
 
-impl <T: Unpin + Clone + Sized> Sevec<T> {
+impl <T: Clone + Sized> Sevec<T> {
 
     /// Copies and inserts a given slice.
     /// ```rust
@@ -109,7 +104,7 @@ impl <T: Unpin + Clone + Sized> Sevec<T> {
             ptr::copy_nonoverlapping(value.as_ptr(), arc_ptr_mut.as_mut_ptr(), value.len());
         }
 
-        self.push_arc_slice(Pin::new(arc_ptr));
+        self.push_arc_slice(arc_ptr);
 
         return;
 
@@ -140,7 +135,7 @@ impl <T: Unpin + Clone + Sized> Sevec<T> {
             ptr::copy_nonoverlapping(value.as_ptr(), arc_ptr_mut.as_mut_ptr(), value.len());
         }
 
-        return self.insert_arc_slice(idx, Pin::new(arc_ptr));
+        return self.insert_arc_slice(idx, arc_ptr);
     }
 
 }
@@ -162,7 +157,7 @@ impl <T> Sevec<T> {
     /// uninitialized [`Arc`] pointer with the purpose of minimizing copies.
     /// ```rust
     /// # use sevec::Sevec;
-    /// # use std::{mem::MaybeUninit, pin::Pin, sync::Arc};
+    /// # use std::{mem::MaybeUninit, sync::Arc};
     /// let mut sevec: Sevec<u32> = Sevec::new();
     ///
     /// let data_len = 6; // Example array size
@@ -183,12 +178,12 @@ impl <T> Sevec<T> {
     /// }
     ///
     /// // Calling this function to push the data into the [`Sevec`].
-    /// sevec.push_arc_slice(Pin::new(data));
+    /// sevec.push_arc_slice(data);
     ///
     /// // We can see the values we wrote directly into the [`Arc`] get displayed.
     /// assert_eq!(sevec.to_string(), "[0, 1, 2, 3, 4, 5]");
     /// ```
-    pub fn push_arc_slice(&mut self, value: Pin<Arc<[T]>>) -> () {
+    pub fn push_arc_slice(&mut self, value: Arc<[T]>) -> () {
         // Gets the reference
         let data_inner_ref = ptr::slice_from_raw_parts(value.as_ptr(), value.len());
         // Adds the data.
@@ -201,19 +196,19 @@ impl <T> Sevec<T> {
     /// Inserts a slice into a specified location in the [`Sevec`].
     /// ```rust
     /// # use sevec::Sevec;
-    /// # use std::{pin::Pin, sync::Arc};
+    /// # use std::sync::Arc;
     /// // Creates array
     /// let mut sevec: Sevec<u32> = vec![1, 2, 3].into();
     /// // Creates data
     /// let data: Arc<[u32]> = vec![4, 5, 6].into_boxed_slice().into();
     ///
     /// // Inserts data between the `1` and `2`.
-    /// sevec.insert_arc_slice(1, Pin::new(data));
+    /// sevec.insert_arc_slice(1, data);
     ///
     /// // Shows result
     /// assert_eq!(&sevec.to_string(), "[1, 4, 5, 6, 2, 3]");
     /// ```
-    pub fn insert_arc_slice(&mut self, idx: usize, value: Pin<Arc<[T]>>) -> Option<()> {
+    pub fn insert_arc_slice(&mut self, idx: usize, value: Arc<[T]>) -> Option<()> {
         // Gets slice
         let slice = ptr::slice_from_raw_parts(value.as_ptr(), value.len());
         // Tries to insert.
@@ -233,7 +228,7 @@ impl <T> Sevec<T> {
     /// the list and therefore adding the data repeatedly to the inner data stores isn't needed.
     /// ```rust
     /// # use sevec::Sevec;
-    /// # use std::{ptr, pin::Pin, sync::Arc};
+    /// # use std::{ptr, sync::Arc};
     /// // Creates array
     /// let mut sevec: Sevec<u32> = vec![1, 2, 3].into();
     /// // Creates data
@@ -538,7 +533,7 @@ impl <T> Sevec<T> {
     /// [`Self::insert_arc_slice`].
     /// ```rust
     /// # use sevec::Sevec;
-    /// # use std::{pin::Pin, sync::Arc};
+    /// # use std::sync::Arc;
     /// // Creating a sevec
     /// let mut sevec: Sevec<u32> = vec![1, 2, 3].into();
     ///
@@ -546,12 +541,12 @@ impl <T> Sevec<T> {
     /// let slice_data = Arc::new([4, 5, 6]);
     ///
     /// // Adding the data before anything else.
-    /// sevec.insert_arc_slice_to_chunk_pos(0, Pin::new(slice_data));
+    /// sevec.insert_arc_slice_to_chunk_pos(0, slice_data);
     ///
     /// // Checking the result.
     /// assert_eq!(&sevec.to_string(), "[4, 5, 6, 1, 2, 3]");
     /// ```
-    pub fn insert_arc_slice_to_chunk_pos(&mut self, chunk_index: usize, value: Pin<Arc<[T]>>) -> () {
+    pub fn insert_arc_slice_to_chunk_pos(&mut self, chunk_index: usize, value: Arc<[T]>) -> () {
         // Gets the reference
         let data_inner_ref = ptr::slice_from_raw_parts(value.as_ptr(), value.len());
         // Adds the data.
@@ -559,6 +554,19 @@ impl <T> Sevec<T> {
         // Adds the reference.
         self.refs.insert(chunk_index, data_inner_ref);
         return ();
+    }
+
+    /// Gets the inner reference values.
+    pub fn get_inner_refs(&self) -> &[*const [T]] {
+        return &self.refs;
+    }
+
+    /// Gets the inner reference values mutably.
+    /// Adding values that aren't in scope for the lifetime of this object will cause undefined
+    /// behavior.
+    /// Know what you're doing before using this method.
+    pub unsafe fn get_inner_refs_mut(&mut self) -> &mut Vec<*const [T]> {
+        return &mut self.refs;
     }
 
 }
@@ -603,8 +611,8 @@ impl <T: std::fmt::Debug> std::string::ToString for Sevec<T> {
     }
 }
 
-impl <T> From<Pin<Arc<[T]>>> for Sevec<T> {
-    fn from(value: Pin<Arc<[T]>>) -> Self {
+impl <T> From<Arc<[T]>> for Sevec<T> {
+    fn from(value: Arc<[T]>) -> Self {
         // Gets the length
         let value_len = value.len();
         let ptr = ptr::slice_from_raw_parts(value.as_ptr(), value_len);
@@ -615,7 +623,7 @@ impl <T> From<Pin<Arc<[T]>>> for Sevec<T> {
     }
 }
 
-impl <T: Unpin + Clone + Sized> From<&[T]> for Sevec<T> {
+impl <T: Clone + Sized> From<&[T]> for Sevec<T> {
     fn from(value: &[T]) -> Self {
         let mut data = Self::new();
         data.push_slice(value);
@@ -623,7 +631,7 @@ impl <T: Unpin + Clone + Sized> From<&[T]> for Sevec<T> {
     }
 }
 
-impl <T: Unpin + Clone + Sized> From<Vec<T>> for Sevec<T> {
+impl <T: Clone + Sized> From<Vec<T>> for Sevec<T> {
     fn from(value: Vec<T>) -> Self {
         let slice = value.as_slice();
         return slice.into();
@@ -784,6 +792,12 @@ mod serde_impl {
 
 }
 
+// SAFETY: Raw pointers reference locally owned `Arc<T>` data.
+// Sound if `T: Send + Sync`.
+// This impl is copied from Arc<T>'s impl of both of these traits.
+unsafe impl <T: Send + Sync> Send for Sevec<T> {}
+unsafe impl <T: Send + Sync> Sync for Sevec<T> {}
+
 #[cfg(test)]
 mod tests {
 
@@ -797,7 +811,7 @@ mod tests {
             "Hello There!",
         ];
         assert_eq!(format!("{:?}", vec), format!("{:?}", v));
-        v.insert_arc_slice_to_chunk_pos(0, Pin::new(vec!["Hello", "H"].into()));
+        v.insert_arc_slice_to_chunk_pos(0, vec!["Hello", "H"].into());
         v.remove_range(0..2).unwrap();
         assert_eq!(format!("{:?}", vec), format!("{:?}", v));
     }
@@ -887,12 +901,12 @@ mod tests {
     fn test_remove_slices() {
 
         let mut data = Sevec::new();
-        data.push_arc_slice(Pin::new(vec![5, 2, 1].into()));
+        data.push_arc_slice(vec![5, 2, 1].into());
         data.push(1);
         data.push(2);
         data.push(3);
         data.push(4);
-        data.push_arc_slice(Pin::new(vec![1, 2, 3].into()));
+        data.push_arc_slice(vec![1, 2, 3].into());
 
         assert_eq!(format!("{:?}", data), format!("{:?}",
             vec![5, 2, 1, 1, 2, 3, 4, 1, 2, 3]
@@ -923,7 +937,7 @@ mod tests {
         assert_eq!(data.get(3), None);
 
         // Pushes new data
-        data.push_arc_slice(Pin::new(vec![1, 2, 3].into()));
+        data.push_arc_slice(vec![1, 2, 3].into());
 
         // Previous Values
         assert_eq!(data.get(0), Some(&0));
