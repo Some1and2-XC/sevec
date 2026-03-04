@@ -733,9 +733,9 @@ mod serde_impl {
                         count += 1;
                     }
                     // let mut value = Sevec::new();
-                    // value.push_arc_slice(Pin::new(data));
+                    // value.push_arc_slice(data);
                     // return value;
-                    Self::Value::from(Pin::new(data))
+                    Self::Value::from(data)
                 },
 
                 // Worse path if we don't know the length.
