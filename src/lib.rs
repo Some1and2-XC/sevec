@@ -1,6 +1,6 @@
 #![doc = include_str!("../README.md")]
 
-use std::{ops::{Bound, RangeBounds}, ptr, sync::Arc};
+use std::{cmp::Ordering, ops::{Bound, RangeBounds}, ptr, sync::Arc};
 
 #[derive(Clone)]
 pub struct Sevec<T> {
@@ -435,6 +435,47 @@ impl <T> Sevec<T> {
         unsafe { self.refs.set_len(running_length); };
 
         return Some(());
+
+    }
+
+    /// Removes the end of a slice and copies to out buffer.
+    /// ```rust
+    /// # use sevec::Sevec;
+    /// // Initializes the array
+    /// let mut sevec: Sevec<u32> = vec![1, 2, 3].into();
+    ///
+    /// // Slices data
+    /// let res = sevec.remove_and_copy_slice_from_end(2).unwrap();
+    ///
+    /// // Checks result
+    /// assert_eq!(&sevec.to_string(), "[1]"); // We got the first allocation only.
+    /// assert_eq!(&*res, &[2, 3]); // We got the first allocation only.
+    /// ```
+    pub fn remove_and_copy_slice_from_end(&mut self, amnt: usize) -> Option<Arc<[T]>> {
+
+        let mut amnt_sliced = 0;
+        let mut current_idx = self.refs.len();
+
+        let out_data = Arc::new_uninit_slice(amnt);
+        let out_data: Arc<[T]> = unsafe { out_data.assume_init() };
+
+        while current_idx > 0 {
+            current_idx -= 1;
+
+            let cur_ref = self.refs[current_idx];
+
+            match (amnt_sliced + cur_ref.len()).cmp(&amnt) {
+                Ordering::Less => (),
+                Ordering::Equal => {
+                },
+                Ordering::Greater => (),
+            }
+
+        }
+
+        return Some(std::default::Default::default());
+
+        todo!();
 
     }
 
