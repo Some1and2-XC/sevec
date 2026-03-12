@@ -138,6 +138,83 @@ impl <T: Clone + Sized> Sevec<T> {
         return self.insert_arc_slice(idx, arc_ptr);
     }
 
+    /// Removes the end of a slice and copies to out buffer.
+    /// ```rust
+    /// # use sevec::Sevec;
+    /// // Initializes the array
+    /// let mut sevec: Sevec<u32> = vec![1, 2, 3].into();
+    ///
+    /// // Slices data
+    /// let res = sevec.remove_and_copy_slice_from_end(2).unwrap();
+    ///
+    /// // Checks result
+    /// assert_eq!(&sevec.to_string(), "[1]"); // We got the first allocation only.
+    /// assert_eq!(&*res, &[2, 3]); // We got the first allocation only.
+    /// ```
+    pub fn remove_and_copy_slice_from_end(&mut self, amnt: usize) -> Option<Arc<[T]>> {
+
+        let mut amnt_sliced = 0;
+        let mut current_idx = self.refs.len();
+
+        let out_data = Arc::new_uninit_slice(amnt);
+        let mut out_data: Arc<[T]> = unsafe { out_data.assume_init() };
+        let out_data_mut = Arc::get_mut(&mut out_data).unwrap();
+
+        let mut cur_ref_iter;
+
+        loop {
+
+            if current_idx == 0 {
+                return None;
+            }
+
+            current_idx -= 1;
+
+            let cur_ref = self.refs[current_idx];
+            amnt_sliced += cur_ref.len();
+            cur_ref_iter = unsafe { cur_ref.as_ref() }.unwrap();
+
+            match amnt_sliced.cmp(&amnt) {
+                Ordering::Less => {
+                    for (i, v) in cur_ref_iter.iter().enumerate() {
+                        out_data_mut[amnt - amnt_sliced + i] = v.clone();
+                    }
+                },
+                Ordering::Equal => {
+                    for (i, v) in cur_ref_iter.iter().enumerate() {
+                        out_data_mut[amnt - amnt_sliced + i] = v.clone();
+                    }
+                    break;
+                },
+                Ordering::Greater => {
+                    let diff = amnt_sliced - amnt;
+                    for (i, v) in cur_ref_iter[diff..].iter().enumerate() {
+                        out_data_mut[i] = v.clone();
+                    }
+                    break;
+                },
+            }
+
+        }
+
+        // Updates length
+        // SAFETY: This is done in this way because we know we are just shrinking the vec.
+        let _ = unsafe { self.refs.set_len(current_idx) };
+
+        // IF we cut one in half, we add back the start.
+        if amnt_sliced > amnt {
+            // If we need to cut one in half.
+            let diff = amnt_sliced - amnt;
+            self.refs.push(
+                ptr::slice_from_raw_parts(cur_ref_iter.as_ptr(), diff)
+            );
+        }
+
+        return Some(out_data);
+
+    }
+
+
 }
 
 impl <T: Clone> Into<Vec<T>> for Sevec<T> {
@@ -438,47 +515,6 @@ impl <T> Sevec<T> {
 
     }
 
-    /// Removes the end of a slice and copies to out buffer.
-    /// ```rust
-    /// # use sevec::Sevec;
-    /// // Initializes the array
-    /// let mut sevec: Sevec<u32> = vec![1, 2, 3].into();
-    ///
-    /// // Slices data
-    /// let res = sevec.remove_and_copy_slice_from_end(2).unwrap();
-    ///
-    /// // Checks result
-    /// assert_eq!(&sevec.to_string(), "[1]"); // We got the first allocation only.
-    /// assert_eq!(&*res, &[2, 3]); // We got the first allocation only.
-    /// ```
-    pub fn remove_and_copy_slice_from_end(&mut self, amnt: usize) -> Option<Arc<[T]>> {
-
-        let mut amnt_sliced = 0;
-        let mut current_idx = self.refs.len();
-
-        let out_data = Arc::new_uninit_slice(amnt);
-        let out_data: Arc<[T]> = unsafe { out_data.assume_init() };
-
-        while current_idx > 0 {
-            current_idx -= 1;
-
-            let cur_ref = self.refs[current_idx];
-
-            match (amnt_sliced + cur_ref.len()).cmp(&amnt) {
-                Ordering::Less => (),
-                Ordering::Equal => {
-                },
-                Ordering::Greater => (),
-            }
-
-        }
-
-        return Some(std::default::Default::default());
-
-        todo!();
-
-    }
-
     /// Gets a specified chunk as a slice.
     /// Note, this is the underlying chunk, not the actual data at a given index.
     /// ```rust
@@ -774,9 +810,9 @@ mod serde_impl {
                         count += 1;
                     }
                     // let mut value = Sevec::new();
-                    // value.push_arc_slice(Pin::new(data));
+                    // value.push_arc_slice(data);
                     // return value;
-                    Self::Value::from(Pin::new(data))
+                    Self::Value::from(data)
                 },
 
                 // Worse path if we don't know the length.
@@ -1014,6 +1050,41 @@ mod tests {
             reference_vec,
             vec![1, 23, 3, 3, 1, 2, 3, 4]
         );
+
+    }
+
+    #[test]
+    fn test_remove_and_copy_from_end() {
+
+        let mut data_1: Sevec<u8> = Sevec::new();
+        data_1.push(1);
+        data_1.push(2);
+        data_1.push(3);
+        data_1.push(4);
+
+        assert!(data_1.remove_and_copy_slice_from_end(5).is_none());
+
+        let res_1 = data_1.remove_and_copy_slice_from_end(2).unwrap();
+
+        assert_eq!(data_1.to_string(), "[1, 2]");
+        assert_eq!(format!("{:?}", res_1), "[3, 4]");
+
+        let res_2 = data_1.remove_and_copy_slice_from_end(0).unwrap();
+        assert_eq!(data_1.to_string(), "[1, 2]");
+        assert_eq!(format!("{:?}", res_2), "[]");
+
+        let res_3 = data_1.remove_and_copy_slice_from_end(1).unwrap();
+        assert_eq!(data_1.to_string(), "[1]");
+        assert_eq!(format!("{:?}", res_3), "[2]");
+
+        let mut data_2: Sevec<u8> = Sevec::new();
+        data_2.push_slice(&[1, 2]);
+        data_2.push(3);
+
+
+        let res_4 = data_2.remove_and_copy_slice_from_end(2).unwrap();
+        assert_eq!(data_1.to_string(), "[1]");
+        assert_eq!(format!("{:?}", res_4), "[2, 3]");
 
     }
 
