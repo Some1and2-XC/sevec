@@ -101,6 +101,25 @@ impl <T> Sevec<T> {
         }
     }
 
+    /// Gets ordinary references to the underlying data.
+    /// This is done by memory transmutation and may be compiled out.
+    #[inline]
+    pub fn get_refs(&self) -> &[&[T]] {
+
+        // SAFETY: the memory layout of a const *[T] should be the same as a &[T].
+        // Therefore, the operation created the proper datatype.
+        // For the lifetime of the returned data, the underlying data should last
+        // no longer than the underlying data. Modification of the underlying data should
+        // also not be possible while the created reference exists.
+        return unsafe {
+            // TODO: I'm not sure that the existing "SAFTEY" comment is good enough at this point.
+            // Using [`std::mem::transmute`] is very unsafe and variance should be explored
+            // further. That being said --- it's probably fine.
+            std::mem::transmute(&self.refs as &[_])
+        };
+
+    }
+
 }
 
 impl <T: Clone + Sized> Sevec<T> {
@@ -1118,6 +1137,56 @@ mod tests {
         let res_4 = data_2.remove_and_copy_slice_from_end(2).unwrap();
         assert_eq!(data_1.to_string(), "[1]");
         assert_eq!(format!("{:?}", res_4), "[2, 3]");
+
+    }
+
+    #[test]
+    fn test_get_refs() {
+
+        let get_elem = |v: &Sevec<usize>, elem: usize| -> Option<usize> {
+            let flattened_data = v.get_refs().into_iter().map(|v| *v).flatten().collect::<Vec<_>>();
+            let elem = flattened_data.get(elem);
+            match elem {
+                Some(&&v) => Some(v),
+                None => None,
+            }
+        };
+
+        let mut data = Sevec::new();
+
+        // With Data Checks
+        data.push(0);
+        data.push(1);
+        data.push(2);
+
+        assert_eq!(get_elem(&data, 0), Some(0));
+        assert_eq!(get_elem(&data, 1), Some(1));
+        assert_eq!(get_elem(&data, 2), Some(2));
+        assert_eq!(get_elem(&data, 3), None);
+
+        // Pushes new data
+        data.push_arc_slice(vec![1, 2, 3].into());
+
+        // Previous Values
+        assert_eq!(get_elem(&data, 0), Some(0));
+        assert_eq!(get_elem(&data, 1), Some(1));
+        assert_eq!(get_elem(&data, 2), Some(2));
+
+        // Extended values
+        assert_eq!(get_elem(&data, 3), Some(1));
+        assert_eq!(get_elem(&data, 4), Some(2));
+        assert_eq!(get_elem(&data, 5), Some(3));
+        assert_eq!(get_elem(&data, 6), None);
+
+        // Data removed check
+        data.remove(1).unwrap();
+
+        assert_eq!(get_elem(&data, 0), Some(0));
+        assert_eq!(get_elem(&data, 1), Some(2));
+        assert_eq!(get_elem(&data, 5), None); // After removal the end would have moved.
+
+        data.remove_range(..).unwrap();
+        assert_eq!(data.len(), 0);
 
     }
 
