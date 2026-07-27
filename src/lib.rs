@@ -120,6 +120,33 @@ impl <T> Sevec<T> {
 
     }
 
+    /// This method inserts a slice into the specified location so long as the slice has a 'static
+    /// lifetime. Similar to the [`Sevec::insert_slice`] method with the primary difference is that
+    /// the slice doesn't get copied into an internal [`Arc`] allocation.
+    ///
+    /// Because the slice data doesn't need to be copied (because it has a 'static lifetime), T
+    /// doesn't need to implement [`Clone`] either.
+    ///
+    /// ```rust
+    /// # use sevec::Sevec;
+    ///
+    /// const DATA: [usize; 4] = [2, 3, 4, 5];
+    ///
+    /// let mut sevec: Sevec<_> = vec![1, 6, 7, 8].into();
+    /// assert_eq!(sevec.to_string(), "[1, 6, 7, 8]");
+    /// sevec.insert_static_slice(1, &DATA).unwrap();
+    /// assert_eq!(sevec.to_string(), "[1, 2, 3, 4, 5, 6, 7, 8]");
+    /// assert_eq!(sevec.len(), 8);
+    /// ```
+    pub fn insert_static_slice(&mut self, idx: usize, value: &'static [T]) -> Option<()> {
+        // Creates raw slice from data.
+        let slice = ptr::slice_from_raw_parts(value.as_ptr(), value.len());
+        // Pushes slice into place.
+        return unsafe {
+            self.insert_raw_slice(idx, slice)
+        };
+    }
+
 }
 
 impl <T: Clone + Sized> Sevec<T> {
@@ -338,6 +365,9 @@ impl <T> Sevec<T> {
     /// This should only be done with a slice which has a lifetime associated with the lifetime of
     /// this object, in particular, either a slice referring to something with a static lifetime or
     /// containing data within the data of this array is intended.
+    ///
+    /// If a slice has a static lifetime however, using [`Sevec::insert_static_slice`] is preferred
+    /// over using this unsafe function.
     ///
     /// This function is intended to be used in cases where repeated data is going to be added to
     /// the list and therefore adding the data repeatedly to the inner data stores isn't needed.
