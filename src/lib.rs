@@ -235,6 +235,8 @@ impl <T: Clone + Sized> Sevec<T> {
 
         // Updates length
         // SAFETY: This is done in this way because we know we are just shrinking the vec.
+        // Because `current_idx` is always less than `self.refs.len()`, out of range memory
+        // is never referred to.
         let _ = unsafe { self.refs.set_len(current_idx) };
 
         // IF we cut one in half, we add back the start.
