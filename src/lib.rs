@@ -169,10 +169,7 @@ impl <T: Clone + Sized> Sevec<T> {
         let mut arc_ptr = unsafe { arc_ptr.assume_init() };
         let arc_ptr_mut = Arc::get_mut(&mut arc_ptr).unwrap();
 
-        // Copies the data.
-        unsafe {
-            ptr::copy_nonoverlapping(value.as_ptr(), arc_ptr_mut.as_mut_ptr(), value.len());
-        }
+        arc_ptr_mut.clone_from_slice(value);
 
         return self.insert_arc_slice(idx, arc_ptr);
     }
