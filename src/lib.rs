@@ -129,12 +129,15 @@ impl <T> Sevec<T> {
     ///
     /// ```rust
     /// # use sevec::Sevec;
-    ///
-    /// const DATA: [usize; 4] = [2, 3, 4, 5];
-    ///
+    /// // Creates the `Sevec<T>`
     /// let mut sevec: Sevec<_> = vec![1, 6, 7, 8].into();
     /// assert_eq!(sevec.to_string(), "[1, 6, 7, 8]");
-    /// sevec.insert_static_slice(1, &DATA).unwrap();
+    ///
+    /// // Inserts data into index 1
+    /// const DATA: &[usize] = &[2, 3, 4, 5];
+    /// sevec.insert_static_slice(1, DATA).unwrap();
+    ///
+    /// // Validates the result
     /// assert_eq!(sevec.to_string(), "[1, 2, 3, 4, 5, 6, 7, 8]");
     /// assert_eq!(sevec.len(), 8);
     /// ```
@@ -210,9 +213,10 @@ impl <T: Clone + Sized> Sevec<T> {
     /// // Slices data
     /// let res = sevec.remove_and_copy_slice_from_end(2).unwrap();
     ///
-    /// // Checks result
-    /// assert_eq!(&sevec.to_string(), "[1]"); // We got the first allocation only.
-    /// assert_eq!(&*res, &[2, 3]); // We got the first allocation only.
+    /// // We are left with the first allocation only
+    /// assert_eq!(&sevec.to_string(), "[1]");
+    /// // The result is the last `amnt` elements (in this case 2 elements)
+    /// assert_eq!(&*res, &[2, 3]);
     /// ```
     pub fn remove_and_copy_slice_from_end(&mut self, amnt: usize) -> Option<Arc<[T]>> {
 
