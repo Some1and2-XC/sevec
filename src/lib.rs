@@ -406,11 +406,24 @@ impl <T> Sevec<T> {
                 (chunk_idx, left, right)
             },
             None => {
-                // If we didn't find the chunk but the chunk index was 0, we continue.
-                if idx != 0 {
+
+                // If we are at the last element, we insert anyway.
+                // This is another O(n) operation, however, because this is the bad path anyway the
+                // performance isn't too much of a concern.
+                // Also, the compiler might do its thing and make this not exist in this way anway.
+                //
+                // It is a shame that we can't get the total length out of
+                // [`Sevec::get_chunk_and_length_from_idx`] but it really isn't worth the API
+                // change to do convert the return type from `Option<(usize, usize)>` to something
+                // like `(usize, Option<usize>)`.
+                if idx == self.len() {
+                    self.refs.push(slice);
+                    return Some(());
+                }
+                else {
                     return None;
                 }
-                (0, ptr::slice_from_raw_parts(ptr::null(), 0), ptr::slice_from_raw_parts(ptr::null(), 0))
+
             },
         };
 
@@ -430,14 +443,11 @@ impl <T> Sevec<T> {
             else {
                 self.refs.insert(write_idx, slice);
             }
-
-            // self.refs.insert(write_idx, slice);
             write_idx += 1;
         }
 
         if right.len() != 0 {
             self.refs.insert(write_idx, right);
-            // write_idx += 1;
         }
 
         return Some(());
@@ -1000,6 +1010,18 @@ mod tests {
 
         unsafe { sevec.insert_raw_slice(0, data_ptr) }.unwrap();
         assert_eq!(&sevec.to_string(), "[4, 5, 6, 4, 5, 6]");
+
+        // Testing adding a value to the end.
+        unsafe { sevec.insert_raw_slice(6, data_ptr) }.unwrap();
+        assert_eq!(&sevec.to_string(), "[4, 5, 6, 4, 5, 6, 4, 5, 6]");
+
+        // Testing adding a value inside a slice.
+        unsafe { sevec.insert_raw_slice(1, data_ptr) }.unwrap();
+        assert_eq!(&sevec.to_string(), "[4, 4, 5, 6, 5, 6, 4, 5, 6, 4, 5, 6]");
+
+        // Testing adding a value at the start.
+        unsafe { sevec.insert_raw_slice(0, data_ptr) }.unwrap();
+        assert_eq!(&sevec.to_string(), "[4, 5, 6, 4, 4, 5, 6, 5, 6, 4, 5, 6, 4, 5, 6]");
 
     }
 
