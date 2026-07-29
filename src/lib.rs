@@ -674,29 +674,33 @@ impl <T> Sevec<T> {
             unsafe {
                 (ending_chunk as *const T).add(ending_chunk_rel_idx + 1)
             },
-            ending_chunk.len() - (ending_chunk_rel_idx + 1)
+            ending_chunk.len() - ending_chunk_rel_idx - 1
         );
-
-        // // Creates new array.
-        // let mut out_refs = Vec::with_capacity(self.refs.len());
 
         // Case where we may be adding an entry.
         if starting_chunk_idx == ending_chunk_idx {
             let mut running_length = starting_chunk_idx;
-            if starting_chunk.len() != 0 {
-                self.refs.insert(running_length, starting_chunk);
-                running_length += 1;
-            }
-            // TODO --- How does this work..??
-            else {
-                self.refs.remove(running_length);
-            }
-            if ending_chunk.len() != 0 {
-                self.refs[running_length] = ending_chunk;
-                // running_length += 1;
-            }
+
+            match (starting_chunk.len(), ending_chunk.len()) {
+                (0, 0) => {
+                    self.refs.remove(running_length);
+                },
+                (0, _) => {
+                    self.refs[running_length] = ending_chunk;
+                },
+                (_, 0) => {
+                    self.refs[running_length] = starting_chunk;
+                },
+                (_, _) => {
+                    self.refs[running_length] = starting_chunk;
+                    self.refs.insert(running_length + 1, ending_chunk);
+                },
+            };
+
             return Some(());
         }
+
+        // If we are not adding an entry, then all of the operations will be done in-place.
 
         let mut running_length = starting_chunk_idx;
 
