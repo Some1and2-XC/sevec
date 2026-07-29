@@ -5,10 +5,8 @@
 The purpose of the [`Sevec`] data structure is to allow for fast array splitting and copy operations.
 If an application needs to handle a large amount of data.
 
-This library is written to use as few allocations as possible, the style of code in this library is a lot more similar to C code than traditional rust code.
-
 ## Unsafe:
-This library uses a good deal of unsafe code. This is for performance.
+This library uses a good deal of unsafe code for pointer manipulation.
 If concerns about the soundness of the unsafe exist, the following command can be used to validate:
 
 ```sh
