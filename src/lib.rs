@@ -396,6 +396,12 @@ impl <T> Sevec<T> {
         let (mut write_idx, left, right) = match self.get_chunk_and_length_from_idx(idx) {
             Some((chunk_idx, prev_sum))=> {
 
+                // By this point, we have found a valid index so if we have a length of 0, we
+                // skip everything and just say the operation would have been successful.
+                if slice.len() == 0 {
+                    return Some(());
+                }
+
                 let chunk = *self.refs.get(chunk_idx)?;
                 let offset = idx - prev_sum;
 
@@ -417,7 +423,9 @@ impl <T> Sevec<T> {
                 // change to do convert the return type from `Option<(usize, usize)>` to something
                 // like `(usize, Option<usize>)`.
                 if idx == self.len() {
-                    self.refs.push(slice);
+                    if slice.len() != 0 {
+                        self.refs.push(slice);
+                    }
                     return Some(());
                 }
                 else {
@@ -436,16 +444,15 @@ impl <T> Sevec<T> {
         }
 
         // We write the actual data over-top of the original chunk each time.
-        if slice.len() != 0 {
-            if let Some(data) = self.refs.get_mut(write_idx) {
-                *data = slice;
-            }
-            else {
-                self.refs.insert(write_idx, slice);
-            }
-            write_idx += 1;
+        if let Some(data) = self.refs.get_mut(write_idx) {
+            *data = slice;
         }
+        else {
+            self.refs.insert(write_idx, slice);
+        }
+        write_idx += 1;
 
+        // Finally, we write the right side.
         if right.len() != 0 {
             self.refs.insert(write_idx, right);
         }
@@ -989,7 +996,37 @@ mod tests {
     }
 
     #[test]
+    fn test_insert_slice() {
+
+        let mut sevec = Sevec::new();
+
+        assert!(sevec.insert_slice(1, &[1, 2, 3]).is_none());
+        assert_eq!(sevec.len(), 0);
+        assert_eq!(sevec.refs.len(), 0);
+
+        sevec.insert_slice(0, &[1, 2, 3]).unwrap();
+        assert_eq!(&sevec.to_string(), "[1, 2, 3]");
+
+        // Testing adding a value to the end.
+        sevec.insert_slice(3, &[4, 5, 6]).unwrap();
+        assert_eq!(&sevec.to_string(), "[1, 2, 3, 4, 5, 6]");
+
+        let other = sevec.clone();
+
+        // Testing adding a value inside a slice.
+        sevec.insert_slice(1, &[7, 8, 9]).unwrap();
+        // panic!("{:?} -> {:?}", other.get_refs(), sevec.get_refs());
+        assert_eq!(&sevec.to_string(), "[1, 7, 8, 9, 2, 3, 4, 5, 6]");
+
+        // // Testing adding a value at the start.
+        // sevec.insert_slice(0, &[4, 5, 6]).unwrap();
+        // assert_eq!(&sevec.to_string(), "[4, 5, 6, 4, 4, 5, 6, 5, 6, 4, 5, 6, 4, 5, 6]");
+
+    }
+
+    #[test]
     fn test_insert_raw_slice() {
+
         let mut sevec = Sevec::new();
         sevec.push_slice(&[1, 2, 3]);
         let data = &[4, 5, 6];
@@ -1242,6 +1279,17 @@ mod tests {
 
         data.remove_range(..).unwrap();
         assert_eq!(data.len(), 0);
+
+    }
+
+    #[test]
+    fn test_insert_slice_edge_cases() {
+
+        let mut sevec = Sevec::new();
+        sevec.insert_slice(0, &[1, 2, 3]);
+        sevec.insert_slice(1, &[]);
+
+        assert_eq!(&sevec.to_string(), "[1, 2, 3]");
 
     }
 
