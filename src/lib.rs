@@ -416,7 +416,7 @@ impl <T> Sevec<T> {
                 // If we are at the last element, we insert anyway.
                 // This is another O(n) operation, however, because this is the bad path anyway the
                 // performance isn't too much of a concern.
-                // Also, the compiler might do its thing and make this not exist in this way anway.
+                // Also, the compiler might do its thing and make this not exist in this way anyway.
                 //
                 // It is a shame that we can't get the total length out of
                 // [`Sevec::get_chunk_and_length_from_idx`] but it really isn't worth the API
@@ -578,17 +578,39 @@ impl <T> Sevec<T> {
         // Reserves enough room for one more element (we may add one more via splitting).
         // We do this just to make the `len` one more and to re-allocate for extra capacity.
         self.refs.push(ptr::slice_from_raw_parts(ptr::null(), 0));
+        // self.refs.reserve(self.refs.len() + 1);
 
         // Adds the chunks
         if starting_chunk.len() != 0 {
             self.refs[running_length] = starting_chunk;
-            running_length += 1;
-        }
-        if ending_chunk.len() != 0 {
-            self.refs[running_length] = ending_chunk;
+            // self.refs.insert(running_length, starting_chunk);
             running_length += 1;
         }
 
+        let final_chunk_idx = running_length;
+
+        if ending_chunk.len() != 0 {
+            // We don't update here because if starting_chunk == ending_chunk and there
+            // are values in both, then this over-writes the wrong reference.
+            // self.refs.insert(running_length, ending_chunk);
+            // self.refs[running_length] = ending_chunk;
+            // self.refs.insert(running_length, ending_chunk);
+            running_length += 1;
+        }
+
+        // self.refs.remove(running_length);
+
+        // // If we didn't just over-write the original index.
+        // if running_length != ending_chunk_idx + (running_length - starting_chunk_idx) {
+        //     for i in (ending_chunk_idx + 1)..(self.refs.len() - 1) {
+        //         self.refs[running_length] = self.refs[i];
+        //         running_length += 1;
+        //     }
+        //     // Update the length
+        //     unsafe { self.refs.set_len(running_length); };
+        // }
+
+        // unsafe { ptr::copy::<T>(self.refs[ending_chunk_idx + 1] as *const _, self.refs[running_length] as *mut _, self.refs.len() - ending_chunk_idx - 1) };
         // This might be able to be replaced with a [`ptr::copy`] call however, in many cases this
         // might just be shifting one element at a time where the speedups may be very little.
         // We subtract 1 from the length because of the padded value added earlier.
@@ -597,7 +619,11 @@ impl <T> Sevec<T> {
             running_length += 1;
         }
 
-        // Update the length
+        if ending_chunk.len() != 0 {
+            self.refs[final_chunk_idx] = ending_chunk;
+        }
+
+        // running_length += self.refs.len() - ending_chunk_idx - 2;
         unsafe { self.refs.set_len(running_length); };
 
         return Some(());
@@ -1011,16 +1037,9 @@ mod tests {
         sevec.insert_slice(3, &[4, 5, 6]).unwrap();
         assert_eq!(&sevec.to_string(), "[1, 2, 3, 4, 5, 6]");
 
-        let other = sevec.clone();
-
         // Testing adding a value inside a slice.
         sevec.insert_slice(1, &[7, 8, 9]).unwrap();
-        // panic!("{:?} -> {:?}", other.get_refs(), sevec.get_refs());
         assert_eq!(&sevec.to_string(), "[1, 7, 8, 9, 2, 3, 4, 5, 6]");
-
-        // // Testing adding a value at the start.
-        // sevec.insert_slice(0, &[4, 5, 6]).unwrap();
-        // assert_eq!(&sevec.to_string(), "[4, 5, 6, 4, 4, 5, 6, 5, 6, 4, 5, 6, 4, 5, 6]");
 
     }
 
@@ -1064,15 +1083,74 @@ mod tests {
 
     #[test]
     fn test_remove_basic() {
-        let mut data = Sevec::new();
-        data.push(1);
-        data.push(2);
-        data.push(3);
-        data.push(4);
-        data.remove_range(1..=2).unwrap();
-        assert_eq!(data.len(), 2);
-        assert_eq!(data.get(0), Some(&1));
-        assert_eq!(data.get(1), Some(&4));
+
+        let mut sevec = Sevec::new();
+        sevec.push(1);
+        sevec.push(2);
+        sevec.push(3);
+        sevec.push(4);
+
+        assert_eq!(&sevec.to_string(), "[1, 2, 3, 4]");
+        sevec.remove_range(1..=2).unwrap();
+
+        assert_eq!(sevec.len(), 2);
+        assert_eq!(&sevec.to_string(), "[1, 4]");
+
+        sevec.remove(1).unwrap();
+        assert_eq!(&sevec.to_string(), "[1]");
+
+        sevec.insert_slice(1, &[5, 6, 7, 8]);
+        assert_eq!(&sevec.to_string(), "[1, 5, 6, 7, 8]");
+
+        sevec.remove(2);
+        assert_eq!(&sevec.to_string(), "[1, 5, 7, 8]");
+
+        sevec.insert_slice(1, &[9, 10, 11]);
+        assert_eq!(&sevec.to_string(), "[1, 9, 10, 11, 5, 7, 8]");
+
+    }
+
+    #[test]
+    fn test_remove_edge_case_1() {
+
+        let mut sevec = Sevec::new();
+        sevec.push(1);
+        assert_eq!(&sevec.to_string(), "[1]");
+
+        sevec.insert_slice(1, &[2, 3, 4]);
+        assert_eq!(&sevec.to_string(), "[1, 2, 3, 4]");
+
+        sevec.push(5);
+        assert_eq!(&sevec.to_string(), "[1, 2, 3, 4, 5]");
+
+        sevec.remove(2);
+        assert_eq!(&sevec.to_string(), "[1, 2, 4, 5]");
+
+        sevec = Sevec::new();
+
+        sevec.insert_slice(0, &[1]);
+        sevec.insert_slice(1, &[5, 6, 7]);
+        sevec.insert_slice(1, &[2, 3, 4]);
+
+        assert_eq!(&sevec.to_string(), "[1, 2, 3, 4, 5, 6, 7]");
+
+        sevec.remove(3).unwrap();
+        assert_eq!(&sevec.to_string(), "[1, 2, 3, 5, 6, 7]");
+    }
+
+    #[test]
+    fn test_remove_edge_case_2() {
+
+        let mut sevec = Sevec::new();
+
+        sevec.insert_slice(0, &[1, 2, 3, 4]).unwrap();
+        assert_eq!(&sevec.to_string(), "[1, 2, 3, 4]");
+
+        sevec.insert_slice(3, &[0]).unwrap();
+        assert_eq!(&sevec.to_string(), "[1, 2, 3, 0, 4]");
+
+        sevec.remove(1).unwrap();
+        assert_eq!(&sevec.to_string(), "[1, 3, 0, 4]");
     }
 
     #[test]
@@ -1290,7 +1368,6 @@ mod tests {
         sevec.insert_slice(1, &[]);
 
         assert_eq!(&sevec.to_string(), "[1, 2, 3]");
-
     }
 
 }
