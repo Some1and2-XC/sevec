@@ -13,7 +13,9 @@ use sevec::Sevec;
 enum Op {
     Insert { index: usize, value: u8 },
     // InsertStaticSlice { index: usize, value: &[u8] },
+    /// Tests [`Sevec::insert_slice`].
     InsertSlice { index: usize, value: Vec<u8> },
+    /// Tests [`Sevec::remove`].
     Remove { index: usize },
     RemoveAndCopySliceFromEnd { amnt: usize },
     RemoveRange { start: usize, end: usize },
@@ -21,6 +23,7 @@ enum Op {
     /// This is to cover the code path where we call [`Sevec::remove_range`] with something like
     /// `..n`.
     RemoveRangeEndBound { start: usize },
+    /// Tests [`Sevec::push`].
     Push { value: u8 },
     PushSlice { value: Vec<u8> },
     Set { index: usize, value: u8 },

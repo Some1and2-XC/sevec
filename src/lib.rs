@@ -539,6 +539,113 @@ impl <T> Sevec<T> {
     /// ```
     pub fn remove_between_start_and_end(&mut self, range_start: usize, range_end: usize) -> Option<()> {
 
+        // // If the range is backwards, return early.
+        // // TODO --- I'm not sure if this is exactly I want to do here...
+        // // Maybe this should return some kind of `Some<()>` in some cases..?
+        // // This function should at the very least guarentee `Some<()>` is returned if something did
+        // // change but this isn't the case here.
+        // if range_end < range_start {
+        //     return None;
+        // }
+        //
+        // let mut len_cumu = 0;
+        // let mut start_i = 0usize;
+        // let mut end_i = 0usize;
+        // // Initializes the chunks to null.
+        // // SAFETY: This is fine so long as neither actual chunk gets de-referenced, and we check
+        // // the length before adding each chunk to it's respective location.
+        // let mut start_chunk = ptr::slice_from_raw_parts(ptr::null(), 0);
+        // let mut end_chunk = ptr::slice_from_raw_parts(ptr::null(), 0);
+        //
+        // // Finds start chunk
+        // for &ptr in self.get_refs() {
+        //     let addr = ptr.as_ptr();
+        //     let len = ptr.len();
+        //     len_cumu += len;
+        //     if len_cumu >= range_start {
+        //         if len_cumu - range_start >= 1 {
+        //             start_chunk = ptr::slice_from_raw_parts(addr, len_cumu - range_start - 1);
+        //         }
+        //         len_cumu -= len;
+        //
+        //         break;
+        //     }
+        //     start_i += 1;
+        // }
+        //
+        // // Early return on not found.
+        // if start_i >= self.refs.len() {
+        //     return None;
+        // }
+        //
+        // // Finds the end chunk
+        // for &ptr in self.get_refs().split_at(start_i).1 {
+        //     let addr = ptr.as_ptr();
+        //     let len = ptr.len();
+        //     len_cumu += len;
+        //     if len_cumu >= range_start {
+        //         len_cumu -= len;
+        //         // let chunk_len = len_cumu - range_end;
+        //         let chunk_len = range_end - len_cumu;
+        //         end_chunk = ptr::slice_from_raw_parts(unsafe { addr.add(chunk_len + 1) }, len - chunk_len);
+        //         break;
+        //     }
+        //     end_i += 1;
+        // }
+        //
+        // // Early return on not found.
+        // if end_i >= self.refs.len() {
+        //     return None;
+        // }
+        //
+        // // If we are increasing the total length of the array.
+        // if start_i == end_i {
+        //
+        //     let mut running_i = start_i;
+        //
+        //     // Conditionally adds chunks.
+        //     // We do this check to avoid adding empty chunks.
+        //     if start_chunk.len() != 0 {
+        //         self.refs.insert(running_i, start_chunk);
+        //         running_i += 1;
+        //     }
+        //
+        //     // Replaces (or removes) last element and replaces with `end_chunk`.
+        //     if end_chunk.len() != 0 {
+        //         self.refs[running_i] = end_chunk;
+        //     }
+        //     else {
+        //         self.refs.remove(running_i);
+        //     }
+        //
+        //     return Some(());
+        // }
+        //
+        // let mut running_i = start_i;
+        //
+        // if start_chunk.len() != 0 {
+        //     self.refs[running_i] = start_chunk;
+        //     running_i += 1;
+        // }
+        // if end_chunk.len() != 0 {
+        //     self.refs[running_i] = end_chunk;
+        //     running_i += 1;
+        // }
+        //
+        // let amnt_of_elements_to_move = self.refs.len() - end_i - 1;
+        //
+        // for i in 0..amnt_of_elements_to_move {
+        //     self.refs[running_i + i] = self.refs[end_i + i + 1];
+        // }
+        //
+        // unsafe {
+        //     self.refs.set_len(running_i + amnt_of_elements_to_move - 1)
+        // };
+        //
+        // return Some(());
+        //
+        // unreachable!();
+
         let (starting_chunk_idx, starting_cumu_len) = self.get_chunk_and_length_from_idx(range_start)?;
         // This is the index of the start of the bounds within the start chunk
         let starting_chunk_rel_idx = range_start - starting_cumu_len;
@@ -573,54 +680,44 @@ impl <T> Sevec<T> {
         // // Creates new array.
         // let mut out_refs = Vec::with_capacity(self.refs.len());
 
-        let mut running_length = starting_chunk_idx;
+        // Case where we may be adding an entry.
+        if starting_chunk_idx == ending_chunk_idx {
+            let mut running_length = starting_chunk_idx;
+            if starting_chunk.len() != 0 {
+                self.refs.insert(running_length, starting_chunk);
+                running_length += 1;
+            }
+            // TODO --- How does this work..??
+            else {
+                self.refs.remove(running_length);
+            }
+            if ending_chunk.len() != 0 {
+                self.refs[running_length] = ending_chunk;
+                // running_length += 1;
+            }
+            return Some(());
+        }
 
-        // Reserves enough room for one more element (we may add one more via splitting).
-        // We do this just to make the `len` one more and to re-allocate for extra capacity.
-        self.refs.push(ptr::slice_from_raw_parts(ptr::null(), 0));
-        // self.refs.reserve(self.refs.len() + 1);
+        let mut running_length = starting_chunk_idx;
 
         // Adds the chunks
         if starting_chunk.len() != 0 {
             self.refs[running_length] = starting_chunk;
-            // self.refs.insert(running_length, starting_chunk);
             running_length += 1;
         }
-
-        let final_chunk_idx = running_length;
 
         if ending_chunk.len() != 0 {
-            // We don't update here because if starting_chunk == ending_chunk and there
-            // are values in both, then this over-writes the wrong reference.
-            // self.refs.insert(running_length, ending_chunk);
-            // self.refs[running_length] = ending_chunk;
-            // self.refs.insert(running_length, ending_chunk);
+            self.refs[running_length] = ending_chunk;
             running_length += 1;
         }
-
-        // self.refs.remove(running_length);
-
-        // // If we didn't just over-write the original index.
-        // if running_length != ending_chunk_idx + (running_length - starting_chunk_idx) {
-        //     for i in (ending_chunk_idx + 1)..(self.refs.len() - 1) {
-        //         self.refs[running_length] = self.refs[i];
-        //         running_length += 1;
-        //     }
-        //     // Update the length
-        //     unsafe { self.refs.set_len(running_length); };
-        // }
 
         // unsafe { ptr::copy::<T>(self.refs[ending_chunk_idx + 1] as *const _, self.refs[running_length] as *mut _, self.refs.len() - ending_chunk_idx - 1) };
         // This might be able to be replaced with a [`ptr::copy`] call however, in many cases this
         // might just be shifting one element at a time where the speedups may be very little.
         // We subtract 1 from the length because of the padded value added earlier.
-        for i in (ending_chunk_idx + 1)..(self.refs.len() - 1) {
+        for i in (ending_chunk_idx + 1)..(self.refs.len()) {
             self.refs[running_length] = self.refs[i];
             running_length += 1;
-        }
-
-        if ending_chunk.len() != 0 {
-            self.refs[final_chunk_idx] = ending_chunk;
         }
 
         // running_length += self.refs.len() - ending_chunk_idx - 2;
@@ -1126,7 +1223,12 @@ mod tests {
         sevec.remove(2);
         assert_eq!(&sevec.to_string(), "[1, 2, 4, 5]");
 
-        sevec = Sevec::new();
+    }
+
+    #[test]
+    fn test_remove_edge_case_2() {
+
+        let mut sevec = Sevec::new();
 
         sevec.insert_slice(0, &[1]);
         sevec.insert_slice(1, &[5, 6, 7]);
@@ -1136,10 +1238,11 @@ mod tests {
 
         sevec.remove(3).unwrap();
         assert_eq!(&sevec.to_string(), "[1, 2, 3, 5, 6, 7]");
+
     }
 
     #[test]
-    fn test_remove_edge_case_2() {
+    fn test_remove_edge_case_3() {
 
         let mut sevec = Sevec::new();
 
@@ -1368,6 +1471,22 @@ mod tests {
         sevec.insert_slice(1, &[]);
 
         assert_eq!(&sevec.to_string(), "[1, 2, 3]");
+    }
+
+    #[test]
+    fn test_simple_remove() {
+
+        let mut sevec: Sevec<_> = vec![1, 2, 3].into();
+        assert_eq!(&sevec.to_string(), "[1, 2, 3]");
+
+        sevec.remove(1).unwrap();
+        // panic!("{:?}", sevec.get_refs());
+        assert_eq!(&sevec.to_string(), "[1, 3]");
+
+
+        sevec.remove(1).unwrap();
+        assert_eq!(&sevec.to_string(), "[1]");
+
     }
 
 }
