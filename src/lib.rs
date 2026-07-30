@@ -544,6 +544,8 @@ impl <T> Sevec<T> {
             return None;
         }
 
+        // Gets chunks and chunk indexes
+
         let mut len_cumu = 0;
         let mut starting_chunk_idx = 0usize;
         // Initializes the chunks to null.
@@ -596,39 +598,6 @@ impl <T> Sevec<T> {
         if ending_chunk_idx >= self.refs.len() {
             return None;
         }
-
-        // --- Old index and chunk code ----
-
-        // let (starting_chunk_idx, starting_cumu_len) = self.get_chunk_and_length_from_idx(range_start)?;
-        // // This is the index of the start of the bounds within the start chunk
-        // let starting_chunk_rel_idx = range_start - starting_cumu_len;
-
-        // // This could be implemented a bit better considering we know starting_chunk_idx and
-        // // starting_cumu_len
-        // // Slight performance like this isn't a concern right now but should be considered in the
-        // // future. (TODO!)
-        // // We should have a function that works like
-        // // "get_chunk_and_length_from_idx_and_other_idx_and_len".
-        // // Very long name but this is okay because it would mainly be used internally (though
-        // // exposed externally).
-        // let (ending_chunk_idx, ending_cumu_len) = self.get_chunk_and_length_from_idx(range_end)?;
-        // let ending_chunk_rel_idx = range_end - ending_cumu_len;
-
-        // // This unwrap shouldn't really ever fail.
-        // // This is between two indexes which are known good (or supposedly are).
-        // // If this fails then there are some serious problems with the state of the code.
-        // // Gets the updated first chunk.
-        // let mut starting_chunk = *self.refs.get(starting_chunk_idx).unwrap();
-        // starting_chunk = ptr::slice_from_raw_parts(starting_chunk as *const _, starting_chunk_rel_idx);
-
-        // // Gets the updated end chunk
-        // let mut ending_chunk = *self.refs.get(ending_chunk_idx).unwrap();
-        // ending_chunk = ptr::slice_from_raw_parts(
-        //     unsafe {
-        //         (ending_chunk as *const T).add(ending_chunk_rel_idx + 1)
-        //     },
-        //     ending_chunk.len() - ending_chunk_rel_idx - 1
-        // );
 
         // --- End of getting indexes and chunks ----
 
