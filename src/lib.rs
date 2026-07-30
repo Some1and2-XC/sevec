@@ -579,11 +579,14 @@ impl <T> Sevec<T> {
             let addr = ptr.as_ptr();
             let len = ptr.len();
             len_cumu += len;
-            if len_cumu >= range_end {
+            if len_cumu > range_end {
                 len_cumu -= len;
                 // let chunk_len = len_cumu - range_end;
                 let chunk_len = range_end - len_cumu;
-                ending_chunk = ptr::slice_from_raw_parts(unsafe { addr.add(chunk_len + 1) }, len - (chunk_len - 1));
+                ending_chunk = ptr::slice_from_raw_parts(
+                    unsafe { addr.add(chunk_len + 1) },
+                    len - (chunk_len + 1)
+                );
                 break;
             }
             ending_chunk_idx += 1;
