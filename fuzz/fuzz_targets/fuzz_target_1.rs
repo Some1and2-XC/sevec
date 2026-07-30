@@ -9,6 +9,7 @@ use sevec::Sevec;
 
 #[derive(Debug, arbitrary::Arbitrary)]
 enum Op {
+    /// Tests [`Sevec::insert`].
     Insert { index: usize, value: u8 },
     // InsertStaticSlice { index: usize, value: &[u8] },
     /// Tests [`Sevec::insert_slice`].
@@ -25,8 +26,10 @@ enum Op {
     RemoveRangeEndBound { start: usize },
     /// Tests [`Sevec::push`].
     Push { value: u8 },
+    /// Tests [`Sevec::push_slice`].
     PushSlice { value: Vec<u8> },
-    Set { index: usize, value: u8 },
+    // Set { index: usize, value: u8 },
+    /// Tests [`Sevec::get`].
     Get { index: usize },
 }
 
@@ -114,6 +117,45 @@ fuzz_target!(|ops: Vec<Op>| {
                 }
 
             },
+
+            Op::RemoveRangeEndBound { start } => {
+
+                let start = start % (refr.len() + 2);
+
+                trace.push(format!("RemoveRangeEndBound {{ start: {start} }}"));
+
+                if let Some(()) = data.remove_range(start..) {
+
+                    // Removes the start index the correct amount of times.
+                    for i in start..refr.len() {
+                        refr.remove(start);
+                    }
+
+                }
+                else {
+                    assert!(
+                        start >= refr.len()
+                    );
+                }
+
+
+            },
+
+            Op::Push { value } => {
+                data.push(value);
+                refr.push(value);
+            },
+
+            Op::PushSlice { value } => {
+                data.push_slice(&value);
+                refr.extend(value);
+            },
+
+            Op::Get { index } => {
+                assert_eq!(data.get(index), refr.get(index));
+            },
+
+            // IMPLEND
 
             _ => (),
 
