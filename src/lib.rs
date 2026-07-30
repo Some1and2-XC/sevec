@@ -539,148 +539,95 @@ impl <T> Sevec<T> {
     /// ```
     pub fn remove_between_start_and_end(&mut self, range_start: usize, range_end: usize) -> Option<()> {
 
-        // Bounds check.
+        // If the range is backwards, return early.
         if range_start > range_end {
             return None;
         }
 
-        // // If the range is backwards, return early.
-        // // TODO --- I'm not sure if this is exactly I want to do here...
-        // // Maybe this should return some kind of `Some<()>` in some cases..?
-        // // This function should at the very least guarentee `Some<()>` is returned if something did
-        // // change but this isn't the case here.
-        // if range_end < range_start {
-        //     return None;
-        // }
-        //
-        // let mut len_cumu = 0;
-        // let mut start_i = 0usize;
-        // let mut end_i = 0usize;
-        // // Initializes the chunks to null.
-        // // SAFETY: This is fine so long as neither actual chunk gets de-referenced, and we check
-        // // the length before adding each chunk to it's respective location.
-        // let mut start_chunk = ptr::slice_from_raw_parts(ptr::null(), 0);
-        // let mut end_chunk = ptr::slice_from_raw_parts(ptr::null(), 0);
-        //
-        // // Finds start chunk
-        // for &ptr in self.get_refs() {
-        //     let addr = ptr.as_ptr();
-        //     let len = ptr.len();
-        //     len_cumu += len;
-        //     if len_cumu >= range_start {
-        //         if len_cumu - range_start >= 1 {
-        //             start_chunk = ptr::slice_from_raw_parts(addr, len_cumu - range_start - 1);
-        //         }
-        //         len_cumu -= len;
-        //
-        //         break;
-        //     }
-        //     start_i += 1;
-        // }
-        //
-        // // Early return on not found.
-        // if start_i >= self.refs.len() {
-        //     return None;
-        // }
-        //
-        // // Finds the end chunk
-        // for &ptr in self.get_refs().split_at(start_i).1 {
-        //     let addr = ptr.as_ptr();
-        //     let len = ptr.len();
-        //     len_cumu += len;
-        //     if len_cumu >= range_start {
-        //         len_cumu -= len;
-        //         // let chunk_len = len_cumu - range_end;
-        //         let chunk_len = range_end - len_cumu;
-        //         end_chunk = ptr::slice_from_raw_parts(unsafe { addr.add(chunk_len + 1) }, len - chunk_len);
-        //         break;
-        //     }
-        //     end_i += 1;
-        // }
-        //
-        // // Early return on not found.
-        // if end_i >= self.refs.len() {
-        //     return None;
-        // }
-        //
-        // // If we are increasing the total length of the array.
-        // if start_i == end_i {
-        //
-        //     let mut running_i = start_i;
-        //
-        //     // Conditionally adds chunks.
-        //     // We do this check to avoid adding empty chunks.
-        //     if start_chunk.len() != 0 {
-        //         self.refs.insert(running_i, start_chunk);
-        //         running_i += 1;
-        //     }
-        //
-        //     // Replaces (or removes) last element and replaces with `end_chunk`.
-        //     if end_chunk.len() != 0 {
-        //         self.refs[running_i] = end_chunk;
-        //     }
-        //     else {
-        //         self.refs.remove(running_i);
-        //     }
-        //
-        //     return Some(());
-        // }
-        //
-        // let mut running_i = start_i;
-        //
-        // if start_chunk.len() != 0 {
-        //     self.refs[running_i] = start_chunk;
-        //     running_i += 1;
-        // }
-        // if end_chunk.len() != 0 {
-        //     self.refs[running_i] = end_chunk;
-        //     running_i += 1;
-        // }
-        //
-        // let amnt_of_elements_to_move = self.refs.len() - end_i - 1;
-        //
-        // for i in 0..amnt_of_elements_to_move {
-        //     self.refs[running_i + i] = self.refs[end_i + i + 1];
-        // }
-        //
-        // unsafe {
-        //     self.refs.set_len(running_i + amnt_of_elements_to_move - 1)
-        // };
-        //
-        // return Some(());
-        //
-        // unreachable!();
+        let mut len_cumu = 0;
+        let mut starting_chunk_idx = 0usize;
+        let mut ending_chunk_idx = 0usize;
+        // Initializes the chunks to null.
+        // SAFETY: This is fine so long as neither actual chunk gets de-referenced, and we check
+        // the length before adding each chunk to it's respective location.
+        let mut starting_chunk = ptr::slice_from_raw_parts(ptr::null(), 0);
+        let mut ending_chunk = ptr::slice_from_raw_parts(ptr::null(), 0);
 
-        let (starting_chunk_idx, starting_cumu_len) = self.get_chunk_and_length_from_idx(range_start)?;
-        // This is the index of the start of the bounds within the start chunk
-        let starting_chunk_rel_idx = range_start - starting_cumu_len;
+        // Finds starting chunk
+        for &ptr in self.get_refs() {
+            let addr = ptr.as_ptr();
+            let len = ptr.len();
+            len_cumu += len;
+            if len_cumu >= range_start {
+                len_cumu -= len;
+                starting_chunk = ptr::slice_from_raw_parts(addr, range_start - len_cumu);
+                // if len_cumu - range_start >= 1 {
+                // }
 
-        // This could be implemented a bit better considering we know starting_chunk_idx and
-        // starting_cumu_len
-        // Slight performance like this isn't a concern right now but should be considered in the
-        // future. (TODO!)
-        // We should have a function that works like
-        // "get_chunk_and_length_from_idx_and_other_idx_and_len".
-        // Very long name but this is okay because it would mainly be used internally (though
-        // exposed externally).
-        let (ending_chunk_idx, ending_cumu_len) = self.get_chunk_and_length_from_idx(range_end)?;
-        let ending_chunk_rel_idx = range_end - ending_cumu_len;
+                break;
+            }
+            starting_chunk_idx += 1;
+        }
 
-        // This unwrap shouldn't really ever fail.
-        // This is between two indexes which are known good (or supposedly are).
-        // If this fails then there are some serious problems with the state of the code.
-        // Gets the updated first chunk.
-        let mut starting_chunk = *self.refs.get(starting_chunk_idx).unwrap();
-        starting_chunk = ptr::slice_from_raw_parts(starting_chunk as *const _, starting_chunk_rel_idx);
+        // Early return on not found.
+        if starting_chunk_idx >= self.refs.len() {
+            return None;
+        }
 
-        // Gets the updated end chunk
-        let mut ending_chunk = *self.refs.get(ending_chunk_idx).unwrap();
-        ending_chunk = ptr::slice_from_raw_parts(
-            unsafe {
-                (ending_chunk as *const T).add(ending_chunk_rel_idx + 1)
-            },
-            ending_chunk.len() - ending_chunk_rel_idx - 1
-        );
+        // Finds the end chunk
+        for &ptr in self.get_refs().split_at(starting_chunk_idx).1 {
+            let addr = ptr.as_ptr();
+            let len = ptr.len();
+            len_cumu += len;
+            if len_cumu >= range_end {
+                len_cumu -= len;
+                // let chunk_len = len_cumu - range_end;
+                let chunk_len = range_end - len_cumu;
+                ending_chunk = ptr::slice_from_raw_parts(unsafe { addr.add(chunk_len + 1) }, len - (chunk_len - 1));
+                break;
+            }
+            ending_chunk_idx += 1;
+        }
+
+        // Early return on not found.
+        if ending_chunk_idx >= self.refs.len() {
+            return None;
+        }
+
+        // --- Old index and chunk code ----
+
+        // let (starting_chunk_idx, starting_cumu_len) = self.get_chunk_and_length_from_idx(range_start)?;
+        // // This is the index of the start of the bounds within the start chunk
+        // let starting_chunk_rel_idx = range_start - starting_cumu_len;
+
+        // // This could be implemented a bit better considering we know starting_chunk_idx and
+        // // starting_cumu_len
+        // // Slight performance like this isn't a concern right now but should be considered in the
+        // // future. (TODO!)
+        // // We should have a function that works like
+        // // "get_chunk_and_length_from_idx_and_other_idx_and_len".
+        // // Very long name but this is okay because it would mainly be used internally (though
+        // // exposed externally).
+        // let (ending_chunk_idx, ending_cumu_len) = self.get_chunk_and_length_from_idx(range_end)?;
+        // let ending_chunk_rel_idx = range_end - ending_cumu_len;
+
+        // // This unwrap shouldn't really ever fail.
+        // // This is between two indexes which are known good (or supposedly are).
+        // // If this fails then there are some serious problems with the state of the code.
+        // // Gets the updated first chunk.
+        // let mut starting_chunk = *self.refs.get(starting_chunk_idx).unwrap();
+        // starting_chunk = ptr::slice_from_raw_parts(starting_chunk as *const _, starting_chunk_rel_idx);
+
+        // // Gets the updated end chunk
+        // let mut ending_chunk = *self.refs.get(ending_chunk_idx).unwrap();
+        // ending_chunk = ptr::slice_from_raw_parts(
+        //     unsafe {
+        //         (ending_chunk as *const T).add(ending_chunk_rel_idx + 1)
+        //     },
+        //     ending_chunk.len() - ending_chunk_rel_idx - 1
+        // );
+
+        // --- End of getting indexes and chunks ----
 
         // Case where we may be adding an entry.
         if starting_chunk_idx == ending_chunk_idx {
