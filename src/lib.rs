@@ -546,7 +546,6 @@ impl <T> Sevec<T> {
 
         let mut len_cumu = 0;
         let mut starting_chunk_idx = 0usize;
-        let mut ending_chunk_idx = 0usize;
         // Initializes the chunks to null.
         // SAFETY: This is fine so long as neither actual chunk gets de-referenced, and we check
         // the length before adding each chunk to it's respective location.
@@ -574,8 +573,9 @@ impl <T> Sevec<T> {
             return None;
         }
 
+        let mut ending_chunk_idx = starting_chunk_idx;
         // Finds the end chunk
-        for &ptr in self.get_refs().split_at(starting_chunk_idx).1 {
+        for &ptr in self.get_refs()[starting_chunk_idx..].iter() {
             let addr = ptr.as_ptr();
             let len = ptr.len();
             len_cumu += len;
