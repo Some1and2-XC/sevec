@@ -15,7 +15,9 @@ enum Op {
     InsertSlice { index: usize, value: Vec<u8> },
     /// Tests [`Sevec::remove`].
     Remove { index: usize },
+    /// Tests [`Sevec::remove_and_copy_slice_from_end`].
     RemoveAndCopySliceFromEnd { amnt: usize },
+    /// Tests [`Sevec::remove_range`].
     RemoveRange { start: usize, end: usize },
     /// Removes all elements after a given index.
     /// This is to cover the code path where we call [`Sevec::remove_range`] with something like
@@ -69,6 +71,24 @@ fuzz_target!(|ops: Vec<Op>| {
                 }
             },
 
+            Op::RemoveAndCopySliceFromEnd { amnt } => {
+
+                let amnt = amnt % (refr.len() + 2);
+
+                trace.push(format!("RemoveRange {{ amnt: {amnt} }}"));
+
+                if let Some(data) = data.remove_and_copy_slice_from_end(amnt) {
+                    assert_eq!(data.len(), amnt);
+                    for _i in 0..amnt {
+                        refr.pop().unwrap();
+                    }
+                }
+                else {
+                    assert!(refr.len() <= amnt);
+                }
+
+            },
+
             Op::RemoveRange { start, end } => {
 
                 // Initializes Values
@@ -94,6 +114,7 @@ fuzz_target!(|ops: Vec<Op>| {
                 }
 
             },
+
             _ => (),
 
         }
