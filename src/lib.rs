@@ -539,6 +539,11 @@ impl <T> Sevec<T> {
     /// ```
     pub fn remove_between_start_and_end(&mut self, range_start: usize, range_end: usize) -> Option<()> {
 
+        // Bounds check.
+        if range_start > range_end {
+            return None;
+        }
+
         // // If the range is backwards, return early.
         // // TODO --- I'm not sure if this is exactly I want to do here...
         // // Maybe this should return some kind of `Some<()>` in some cases..?

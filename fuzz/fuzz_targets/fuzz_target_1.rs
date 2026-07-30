@@ -4,8 +4,6 @@ extern crate libfuzzer_sys;
 extern crate arbitrary;
 extern crate sevec;
 
-use std::panic::catch_unwind;
-
 use libfuzzer_sys::fuzz_target;
 use sevec::Sevec;
 
@@ -71,6 +69,31 @@ fuzz_target!(|ops: Vec<Op>| {
                 }
             },
 
+            Op::RemoveRange { start, end } => {
+
+                // Initializes Values
+                let start = start % (refr.len() + 2);
+                let end = end % (refr.len() + 2);
+
+                trace.push(format!("RemoveRange {{ start: {start}, end: {end} }}"));
+
+                if let Some(()) = data.remove_range(start..=end) {
+
+                    // Removes the start index the correct amount of times.
+                    for i in start..=end {
+                        refr.remove(start);
+                    }
+
+                }
+                else {
+                    assert!(
+                        start >= refr.len() ||
+                        end >= refr.len() ||
+                        end < start
+                    );
+                }
+
+            },
             _ => (),
 
         }
