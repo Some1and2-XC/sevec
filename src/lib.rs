@@ -679,21 +679,20 @@ impl <T> Sevec<T> {
 
         // Case where we may be adding an entry.
         if starting_chunk_idx == ending_chunk_idx {
-            let mut running_length = starting_chunk_idx;
 
             match (starting_chunk.len(), ending_chunk.len()) {
                 (0, 0) => {
-                    self.refs.remove(running_length);
+                    self.refs.remove(starting_chunk_idx);
                 },
                 (0, _) => {
-                    self.refs[running_length] = ending_chunk;
+                    self.refs[starting_chunk_idx] = ending_chunk;
                 },
                 (_, 0) => {
-                    self.refs[running_length] = starting_chunk;
+                    self.refs[starting_chunk_idx] = starting_chunk;
                 },
                 (_, _) => {
-                    self.refs[running_length] = starting_chunk;
-                    self.refs.insert(running_length + 1, ending_chunk);
+                    self.refs[starting_chunk_idx] = starting_chunk;
+                    self.refs.insert(starting_chunk_idx + 1, ending_chunk);
                 },
             };
 
