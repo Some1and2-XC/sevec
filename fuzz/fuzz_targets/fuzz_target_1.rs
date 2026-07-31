@@ -103,7 +103,7 @@ fuzz_target!(|ops: Vec<Op>| {
                 if let Some(()) = data.remove_range(start..=end) {
 
                     // Removes the start index the correct amount of times.
-                    for i in start..=end {
+                    for _i in start..=end {
                         refr.remove(start);
                     }
 
@@ -127,7 +127,7 @@ fuzz_target!(|ops: Vec<Op>| {
                 if let Some(()) = data.remove_range(start..) {
 
                     // Removes the start index the correct amount of times.
-                    for i in start..refr.len() {
+                    for _i in start..refr.len() {
                         refr.remove(start);
                     }
 
@@ -157,7 +157,7 @@ fuzz_target!(|ops: Vec<Op>| {
 
             // IMPLEND
 
-            _ => (),
+            // _ => (),
 
         }
 
