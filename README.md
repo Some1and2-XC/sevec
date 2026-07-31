@@ -13,4 +13,4 @@ If concerns about the soundness of the unsafe exist, the following command can b
 MIRIFLAGS=-Zmiri-strict-provenance rustup run nightly cargo miri test
 ```
 
-This library also uses fuzzing, using a [`Vec`] as reference.
+This library also uses fuzzing.
